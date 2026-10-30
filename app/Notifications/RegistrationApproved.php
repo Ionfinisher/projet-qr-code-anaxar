@@ -18,9 +18,15 @@ class RegistrationApproved extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Votre compte est validé')
             ->greeting('Bonjour '.$notifiable->name)
             ->line('Votre dossier a été validé. Vous pouvez maintenant vous connecter à votre espace.');
+
+        if (method_exists($notifiable, 'hasVerifiedEmail') && ! $notifiable->hasVerifiedEmail()) {
+            $message->line('Pensez également à vérifier votre adresse email : un lien vous a été envoyé lors de votre inscription.');
+        }
+
+        return $message->action('Se connecter', route('login'));
     }
 }

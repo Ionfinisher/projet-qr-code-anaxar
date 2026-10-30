@@ -9,9 +9,11 @@ use App\Notifications\RegistrationApproved;
 use App\Notifications\RegistrationRejected;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class RegistrationController extends Controller
 {
@@ -35,17 +37,29 @@ class RegistrationController extends Controller
 
     public function show(Inscription $inscription): Response
     {
+        $inscription->load([
+            'transporteur.user',
+            'pieceinscriptions.pieceafournir',
+            'latestRejection',
+        ]);
+
         return Inertia::render('Admin/Registrations/Show', [
-            'registration' => $inscription->load(['transporteur.user', 'piecesafournir', 'pieceinscriptions', 'latestRejection']),
+            'registration' => $inscription,
         ]);
     }
 
     public function approve(Inscription $inscription): RedirectResponse
     {
-        $inscription->update(['statut' => 'approved']);
-        $inscription->transporteur?->update(['statut' => 'approved']);
-        $inscription->transporteur?->user?->update(['statut' => 'approved']);
-        $inscription->transporteur?->user?->notify(new RegistrationApproved());
+        if ($inscription->statut === Inscription::STATUS_APPROVED) {
+            return back()->with('status', 'Ce dossier est déjà validé.');
+        }
+
+        DB::transaction(function () use ($inscription) {
+            $inscription->update(['statut' => Inscription::STATUS_APPROVED]);
+            $inscription->transporteur?->update(['statut' => Inscription::STATUS_APPROVED]);
+            $inscription->transporteur?->user?->update(['statut' => Inscription::STATUS_APPROVED]);
+            $inscription->transporteur?->user?->notify(new RegistrationApproved);
+        });
 
         return back()->with('status', 'Dossier validé.');
     }
@@ -53,24 +67,42 @@ class RegistrationController extends Controller
     public function reject(Request $request, Inscription $inscription): RedirectResponse
     {
         $validated = $request->validate(['raison' => ['required', 'string', 'max:2000']]);
-        $inscription->update(['statut' => 'rejected']);
-        $inscription->transporteur?->update(['statut' => 'rejected']);
-        $inscription->transporteur?->user?->update(['statut' => 'rejected']);
-        $inscription->rejetinscriptions()->create(['raison' => $validated['raison'], 'statut' => 'active']);
-        $inscription->transporteur?->user?->notify(new RegistrationRejected($validated['raison'], $inscription->numero_dossier));
+
+        DB::transaction(function () use ($inscription, $validated) {
+            $inscription->update(['statut' => Inscription::STATUS_REJECTED]);
+            $inscription->transporteur?->update(['statut' => Inscription::STATUS_REJECTED]);
+            $inscription->transporteur?->user?->update(['statut' => Inscription::STATUS_REJECTED]);
+
+            $inscription->rejetinscriptions()
+                ->where('statut', 'active')
+                ->update(['statut' => 'inactive']);
+
+            $inscription->rejetinscriptions()->create([
+                'raison' => $validated['raison'],
+                'statut' => 'active',
+            ]);
+
+            $inscription->transporteur?->user?->notify(
+                new RegistrationRejected($validated['raison'], $inscription->numero_dossier)
+            );
+        });
 
         return back()->with('status', 'Dossier rejeté.');
     }
 
-    public function download(string $piece): \Symfony\Component\HttpFoundation\StreamedResponse
+    public function download(string $piece): StreamedResponse
     {
-        abort_unless(auth()->user()->hasRole('admin'), 403);
-        $piece = PieceInscription::query()
-            ->where('id', $piece)
-            ->orWhere('keypieceinscription', $piece)
-            ->firstOrFail();
-        abort_unless(Storage::exists($piece->piece), 404);
+        abort_unless(auth()->user()?->isAdmin(), 403);
 
-        return Storage::download($piece->piece);
+        $pieceInscription = ctype_digit($piece)
+            ? PieceInscription::query()->whereKey((int) $piece)->firstOrFail()
+            : PieceInscription::query()->where('keypieceinscription', $piece)->firstOrFail();
+
+        abort_unless($pieceInscription->piece && Storage::disk('local')->exists($pieceInscription->piece), 404);
+
+        $extension = pathinfo($pieceInscription->piece, PATHINFO_EXTENSION);
+        $filename = trim(($pieceInscription->pieceafournir?->libelle ?? 'document').($extension ? '.'.$extension : ''));
+
+        return Storage::disk('local')->download($pieceInscription->piece, $filename);
     }
 }

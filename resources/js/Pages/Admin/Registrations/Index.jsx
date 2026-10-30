@@ -2,6 +2,12 @@ import { Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head } from '@inertiajs/react';
 
+const STATUS_LABELS = {
+    pending: 'En cours de validation',
+    approved: 'Validé',
+    rejected: 'À corriger',
+};
+
 export default function Index({ registrations }) {
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Dossiers d'inscription</h2>}>
@@ -17,7 +23,7 @@ export default function Index({ registrations }) {
                                         <td className="px-6 py-4">{registration.numero_dossier}</td>
                                         <td className="px-6 py-4">{registration.name}</td>
                                         <td className="px-6 py-4">{registration.email}</td>
-                                        <td className="px-6 py-4">{registration.status}</td>
+                                        <td className="px-6 py-4">{STATUS_LABELS[registration.status] || registration.status}</td>
                                         <td className="px-6 py-4 text-end"><Link className="text-indigo-700 underline" href={route('admin.registrations.show', registration.id)}>Consulter</Link></td>
                                     </tr>
                                 ))}

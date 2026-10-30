@@ -2,18 +2,18 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasGeneratedKey;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class RejetInscription extends Model
 {
+    use HasFactory, HasGeneratedKey;
+
     protected $table = 'rejet_inscription';
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
+    protected string $keyColumn = 'keyrejetinscription';
+
     protected $fillable = [
         'keyrejetinscription',
         'idinscription',

@@ -32,12 +32,16 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
-        if (! $request->user()->isApproved() && ! $request->user()->hasRole('admin')) {
+        $user = $request->user();
+
+        if (! $user->isApproved() && ! $user->isAdmin()) {
             Auth::logout();
 
-            return back()->withErrors([
-                'email' => 'Votre compte est encore en cours de validation.',
-            ]);
+            $message = $user->hasVerifiedEmail()
+                ? 'Votre dossier est encore en cours de validation.'
+                : 'Veuillez vérifier votre adresse email avant de vous connecter.';
+
+            return back()->withErrors(['email' => $message]);
         }
 
         $request->session()->regenerate();

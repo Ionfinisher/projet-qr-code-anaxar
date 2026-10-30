@@ -1,7 +1,7 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
+use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RegistrationEditController;
 use App\Http\Controllers\RegistrationStatusController;
 use Illuminate\Foundation\Application;
@@ -36,9 +36,15 @@ Route::get('/registration/status', [RegistrationStatusController::class, 'create
 Route::get('/registration/verify/{id}/{hash}', [RegistrationStatusController::class, 'verify'])
     ->middleware('signed')
     ->name('registration.verification');
-Route::get('/registration/status/search', [RegistrationStatusController::class, 'show'])->name('registration.status.search');
-Route::get('/registration/{numeroDossier}/edit', [RegistrationEditController::class, 'edit'])->name('registration.edit');
-Route::post('/registration/{numeroDossier}', [RegistrationEditController::class, 'update'])->name('registration.update');
+Route::get('/registration/status/search', [RegistrationStatusController::class, 'show'])
+    ->middleware('throttle:10,1')
+    ->name('registration.status.search');
+Route::get('/registration/{numeroDossier}/edit', [RegistrationEditController::class, 'edit'])
+    ->middleware('throttle:10,1')
+    ->name('registration.edit');
+Route::post('/registration/{numeroDossier}', [RegistrationEditController::class, 'update'])
+    ->middleware('throttle:10,1')
+    ->name('registration.update');
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/registrations', [AdminRegistrationController::class, 'index'])->name('registrations.index');

@@ -12,6 +12,8 @@ class VerifyRegistrationEmail extends Notification implements ShouldQueue
 {
     use Queueable;
 
+    public function __construct(private readonly ?string $numeroDossier = null) {}
+
     public function via(object $notifiable): array
     {
         return ['mail'];
@@ -19,10 +21,16 @@ class VerifyRegistrationEmail extends Notification implements ShouldQueue
 
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        $message = (new MailMessage)
             ->subject('Vérifiez votre adresse email')
             ->greeting('Bonjour '.$notifiable->name)
-            ->line('Merci pour votre inscription. Cliquez sur le bouton ci-dessous pour vérifier votre adresse email.')
+            ->line('Merci pour votre inscription. Cliquez sur le bouton ci-dessous pour vérifier votre adresse email.');
+
+        if ($this->numeroDossier !== null) {
+            $message->line('Numéro de dossier : '.$this->numeroDossier);
+        }
+
+        return $message
             ->action('Vérifier mon email', URL::temporarySignedRoute('registration.verification', now()->addDay(), [
                 'id' => $notifiable->getKey(),
                 'hash' => sha1($notifiable->getEmailForVerification()),
