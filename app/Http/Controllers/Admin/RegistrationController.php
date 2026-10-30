@@ -51,7 +51,7 @@ class RegistrationController extends Controller
     public function approve(Inscription $inscription): RedirectResponse
     {
         if ($inscription->statut === Inscription::STATUS_APPROVED) {
-            return back()->with('status', 'Ce dossier est déjà validé.');
+            return back()->with('error', 'Ce dossier est déjà validé.');
         }
 
         DB::transaction(function () use ($inscription) {
@@ -61,7 +61,7 @@ class RegistrationController extends Controller
             $inscription->transporteur?->user?->notify(new RegistrationApproved);
         });
 
-        return back()->with('status', 'Dossier validé.');
+        return back()->with('success', 'Dossier validé.');
     }
 
     public function reject(Request $request, Inscription $inscription): RedirectResponse
@@ -87,7 +87,7 @@ class RegistrationController extends Controller
             );
         });
 
-        return back()->with('status', 'Dossier rejeté.');
+        return back()->with('success', 'Dossier rejeté.');
     }
 
     public function download(string $piece): StreamedResponse

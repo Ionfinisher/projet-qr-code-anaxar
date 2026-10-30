@@ -26,13 +26,16 @@ class RegistrationStatusController extends Controller
                 'email' => (string) $request->query('email', ''),
                 'numero_dossier' => (string) $request->query('numero_dossier', ''),
             ],
-            'status_message' => session('status'),
         ]);
     }
 
     public function show(Request $request): Response
     {
-        $request->merge(['email' => Str::lower((string) $request->input('email'))]);
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email'))),
+            'numero_dossier' => Str::upper((string) preg_replace('/\s+/u', '', (string) $request->input('numero_dossier'))),
+        ]);
+
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'numero_dossier' => ['required', 'string', 'max:50'],
@@ -46,7 +49,6 @@ class RegistrationStatusController extends Controller
 
         return Inertia::render('Registration/Status', [
             'lookup' => $validated,
-            'status_message' => session('status'),
             'registration' => $inscription ? [
                 'numero_dossier' => $inscription->numero_dossier,
                 'status' => $inscription->statut,
@@ -88,6 +90,6 @@ class RegistrationStatusController extends Controller
 
         return redirect()
             ->route('login')
-            ->with('status', 'Votre email est vérifié. Votre dossier est en cours de validation.');
+            ->with('success', 'Votre email est vérifié. Votre dossier est en cours de validation.');
     }
 }

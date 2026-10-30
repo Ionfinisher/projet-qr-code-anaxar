@@ -1,4 +1,5 @@
 import { Link, Head } from '@inertiajs/react';
+import FlashAlerts from '@/Components/FlashAlerts';
 
 export default function Welcome({ auth, laravelVersion, phpVersion }) {
     return (
@@ -299,6 +300,8 @@ export default function Welcome({ auth, laravelVersion, phpVersion }) {
                     </div>
                 </div>
             </div>
+
+            <FlashAlerts />
 
             <style>{`
                 .bg-dots-darker {

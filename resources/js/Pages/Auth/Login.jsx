@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Checkbox from '@/Components/Checkbox';
 import GuestLayout from '@/Layouts/GuestLayout';
 import InputError from '@/Components/InputError';
@@ -6,10 +6,9 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import { Head, Link, useForm } from '@inertiajs/react';
-import { useState } from 'react';
 import { EyeIcon, EyeSlashIcon } from '@phosphor-icons/react';
 
-export default function Login({ status, canResetPassword }) {
+export default function Login({ canResetPassword }) {
     const [showPassword, setShowPassword] = useState(false);
 
     const { data, setData, post, processing, errors, reset } = useForm({
@@ -42,8 +41,6 @@ export default function Login({ status, canResetPassword }) {
                 <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">Se connecter</h2>
                 <p className="mt-2 text-sm text-gray-600">Transporteurs, transitaires et administrateurs du port.</p>
             </div>
-
-            {status && <div className="mb-4 font-medium text-sm text-green-600">{status}</div>}
 
             <form onSubmit={submit}>
                 <div>
@@ -103,9 +100,18 @@ export default function Login({ status, canResetPassword }) {
 
                     <Link
                         href={route('register')}
-                        className="w-full py-1 rounded-md bg-gray-100 border border-gray-600 flex justify-center mb-4" disabled={processing}>
+                        className="w-full py-1 rounded-md bg-gray-100 border border-gray-600 flex justify-center mb-4"
+                    >
                         Créer un compte transporteur
                     </Link>
+
+                    <Link
+                        href={route('registration.status')}
+                        className="w-full py-2 rounded-md border border-indigo-700 text-indigo-700 flex justify-center mb-4 font-semibold transition hover:bg-indigo-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                    >
+                        Suivre mon dossier
+                    </Link>
+
                     {canResetPassword && (
                         <Link
                             href={route('password.request')}

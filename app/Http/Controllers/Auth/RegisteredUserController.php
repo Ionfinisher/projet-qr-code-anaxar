@@ -131,7 +131,7 @@ class RegisteredUserController extends Controller
 
         return redirect()
             ->route('login')
-            ->with('status', "Votre dossier {$inscription->numero_dossier} a été créé. Vérifiez votre email ({$user->email}) pour continuer.");
+            ->with('success', "Votre dossier {$inscription->numero_dossier} a été créé. Vérifiez votre email ({$user->email}) pour continuer.");
     }
 
     /**

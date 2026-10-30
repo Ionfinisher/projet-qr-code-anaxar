@@ -17,6 +17,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
@@ -72,6 +74,7 @@ class RegistrationWorkflowTest extends TestCase
         $response = $this->post('/register', $this->registrationPayload($pays, $piece));
 
         $response->assertRedirect(route('login'));
+        $response->assertSessionHas('success');
         $this->assertGuest();
 
         $this->assertDatabaseHas('users', [
@@ -149,16 +152,16 @@ class RegistrationWorkflowTest extends TestCase
             'name' => 'Acme Transport',
             'email' => 'acme@example.com',
             'password' => 'Password1!',
-            'email_verified_at' => now(),
             'statut' => User::STATUS_PENDING,
         ]);
+        $user->forceFill(['email_verified_at' => now()])->save();
 
         $response = $this->post('/login', [
             'email' => 'acme@example.com',
             'password' => 'Password1!',
         ]);
 
-        $response->assertSessionHasErrors('email');
+        $response->assertSessionHas('error', 'Votre dossier est encore en cours de validation.');
         $this->assertGuest();
         $this->assertNotNull($user);
     }
@@ -178,7 +181,7 @@ class RegistrationWorkflowTest extends TestCase
             'password' => 'Password1!',
         ]);
 
-        $response->assertRedirect('/dashboard');
+        $response->assertRedirect('/dashboard')->assertSessionHas('success');
         $this->assertAuthenticatedAs($user);
     }
 
@@ -204,7 +207,7 @@ class RegistrationWorkflowTest extends TestCase
             'hash' => sha1($user->getEmailForVerification()),
         ]);
 
-        $this->get($url)->assertRedirect(route('login'));
+        $this->get($url)->assertRedirect(route('login'))->assertSessionHas('success');
 
         $this->assertNotNull($user->fresh()->email_verified_at);
         Notification::assertSentTo($user, RegistrationPending::class);
@@ -228,7 +231,8 @@ class RegistrationWorkflowTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('admin.registrations.approve', $registration))
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHas('success');
 
         $this->assertSame(Inscription::STATUS_APPROVED, $registration->fresh()->statut);
         $this->assertSame('approved', $registration->fresh()->transporteur->statut);
@@ -253,7 +257,8 @@ class RegistrationWorkflowTest extends TestCase
 
         $this->actingAs($admin)
             ->post(route('admin.registrations.reject', $registration), ['raison' => 'Document illisible'])
-            ->assertRedirect();
+            ->assertRedirect()
+            ->assertSessionHas('success');
 
         $registration->refresh();
         $this->assertSame(Inscription::STATUS_REJECTED, $registration->statut);
@@ -296,6 +301,7 @@ class RegistrationWorkflowTest extends TestCase
         ]);
 
         $response->assertRedirect(route('registration.status'));
+        $response->assertSessionHas('success');
         $this->assertSame(Inscription::STATUS_PENDING, $registration->fresh()->statut);
         $this->assertSame('pending', $registration->fresh()->transporteur->statut);
         $this->assertSame('pending', $registration->fresh()->transporteur->user->statut);
@@ -309,6 +315,36 @@ class RegistrationWorkflowTest extends TestCase
         Storage::disk('local')->assertExists($pieceInscription->piece);
 
         Notification::assertSentTo($registration->fresh()->transporteur->user, RegistrationPending::class);
+    }
+
+    public function test_registration_status_can_be_found_with_exact_email_and_numero_dossier(): void
+    {
+        $registration = $this->createRejectedRegistration();
+
+        $response = $this->get(route('registration.status.search', [
+            'email' => $registration->email,
+            'numero_dossier' => $registration->numero_dossier,
+        ]));
+
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Registration/Status')
+            ->where('registration.numero_dossier', $registration->numero_dossier)
+            ->where('registration.status', Inscription::STATUS_REJECTED)
+            ->where('registration.can_edit', true));
+    }
+
+    public function test_registration_status_lookup_ignores_email_case_and_numero_spacing(): void
+    {
+        $registration = $this->createRejectedRegistration();
+
+        $response = $this->get(route('registration.status.search', [
+            'email' => '  '.Str::upper($registration->email).'  ',
+            'numero_dossier' => '  '.Str::lower($registration->numero_dossier).'  ',
+        ]));
+
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Registration/Status')
+            ->where('registration.numero_dossier', $registration->numero_dossier));
     }
 
     private function createRejectedRegistration(): Inscription

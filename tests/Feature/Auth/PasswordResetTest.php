@@ -25,8 +25,9 @@ class PasswordResetTest extends TestCase
 
         $user = User::factory()->create();
 
-        $this->post('/forgot-password', ['email' => $user->email]);
+        $response = $this->post('/forgot-password', ['email' => $user->email]);
 
+        $response->assertSessionHas('success');
         Notification::assertSentTo($user, ResetPassword::class);
     }
 
@@ -65,9 +66,22 @@ class PasswordResetTest extends TestCase
 
             $response
                 ->assertSessionHasNoErrors()
-                ->assertRedirect(route('login'));
+                ->assertRedirect(route('login'))
+                ->assertSessionHas('success');
 
             return true;
         });
+    }
+
+    public function test_invalid_reset_token_returns_a_flash_error(): void
+    {
+        $response = $this->from('/reset-password/invalid')->post('/reset-password', [
+            'token' => 'invalid-token',
+            'email' => 'nobody@example.com',
+            'password' => 'password',
+            'password_confirmation' => 'password',
+        ]);
+
+        $response->assertSessionHas('error');
     }
 }
