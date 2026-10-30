@@ -6,30 +6,17 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import { Head, Link, useForm } from '@inertiajs/react';
 
-const countries = [
-    { value: 'Togo', label: 'Togo' },
-    { value: 'Benin', label: 'Bénin' },
-    { value: 'Burkina Faso', label: 'Burkina Faso' },
-    { value: 'Cote d’Ivoire', label: "Côte d'Ivoire" },
-    { value: 'Ghana', label: 'Ghana' },
-    { value: 'Nigeria', label: 'Nigeria' },
-    { value: 'Senegal', label: 'Sénégal' },
-    { value: 'Cameroon', label: 'Cameroun' },
-    { value: 'Guinea', label: 'Guinée' },
-    { value: 'Mali', label: 'Mali' },
-    { value: 'Niger', label: 'Niger' },
-    { value: 'Other', label: 'Autre' },
-];
-
-export default function Register({ pieces = [] }) {
+export default function Register({ pays = [], pieces = [] }) {
     const [step, setStep] = useState(1);
     const { data, setData, post, processing, errors, reset } = useForm({
         user_type: 'societe',
-        country: 'Togo',
-        email: '',
+        idpays: pays[0]?.id ?? '',
         raison_sociale: '',
         nom: '',
         prenom: '',
+        telephone: '',
+        adresse: '',
+        email: '',
         password: '',
         password_confirmation: '',
         documents: {},
@@ -41,6 +28,39 @@ export default function Register({ pieces = [] }) {
         };
     }, []);
 
+    useEffect(() => {
+        const errorKeys = Object.keys(errors);
+
+        if (errorKeys.length === 0) {
+            return;
+        }
+
+        const hasSecondStepError = errorKeys.some(
+            (key) =>
+                key.startsWith('documents.') ||
+                key === 'password' ||
+                key === 'password_confirmation',
+        );
+
+        setStep(hasSecondStepError ? 2 : 1);
+    }, [errors]);
+
+    const availablePieces = pieces.filter(
+        (piece) =>
+            !piece.type_de_piece ||
+            piece.type_de_piece === 'all' ||
+            piece.type_de_piece === data.user_type,
+    );
+
+    const pieceAccept = (piece) => {
+        const extensions = (piece.extension || 'pdf,jpg,jpeg,png')
+            .split(',')
+            .map((extension) => extension.trim().toLowerCase())
+            .filter(Boolean);
+
+        return extensions.map((extension) => `.${extension}`).join(',');
+    };
+
     const continueToPassword = (event) => {
         event.preventDefault();
         setStep(2);
@@ -49,6 +69,10 @@ export default function Register({ pieces = [] }) {
     const submit = (event) => {
         event.preventDefault();
         post(route('register'), { forceFormData: true });
+    };
+
+    const setDocument = (pieceId, file) => {
+        setData('documents', { ...data.documents, [pieceId]: file ?? null });
     };
 
     return (
@@ -97,22 +121,25 @@ export default function Register({ pieces = [] }) {
                     </div>
 
                     <div className="mt-5">
-                        <InputLabel htmlFor="country" value="Pays" />
+                        <InputLabel htmlFor="idpays" value="Pays" />
                         <select
-                            id="country"
-                            name="country"
-                            value={data.country}
+                            id="idpays"
+                            name="idpays"
+                            value={data.idpays}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                            onChange={(event) => setData('country', event.target.value)}
+                            onChange={(event) => setData('idpays', event.target.value)}
                             required
                         >
-                            {countries.map((country) => (
-                                <option key={country.value} value={country.value}>
-                                    {country.label}
+                            <option value="" disabled>
+                                Sélectionnez un pays
+                            </option>
+                            {pays.map((country) => (
+                                <option key={country.id} value={country.id}>
+                                    {country.nom}
                                 </option>
                             ))}
                         </select>
-                        <InputError message={errors.country} className="mt-2" />
+                        <InputError message={errors.idpays} className="mt-2" />
                     </div>
 
                     {data.user_type === 'societe' ? (
@@ -159,6 +186,34 @@ export default function Register({ pieces = [] }) {
                             </div>
                         </div>
                     )}
+
+                    <div className="mt-5">
+                        <InputLabel htmlFor="telephone" value="Téléphone" />
+                        <TextInput
+                            id="telephone"
+                            type="tel"
+                            name="telephone"
+                            value={data.telephone}
+                            className="mt-1 block w-full"
+                            autoComplete="tel"
+                            onChange={(event) => setData('telephone', event.target.value)}
+                            required
+                        />
+                        <InputError message={errors.telephone} className="mt-2" />
+                    </div>
+
+                    <div className="mt-5">
+                        <InputLabel htmlFor="adresse" value="Adresse (optionnel)" />
+                        <TextInput
+                            id="adresse"
+                            name="adresse"
+                            value={data.adresse}
+                            className="mt-1 block w-full"
+                            autoComplete="street-address"
+                            onChange={(event) => setData('adresse', event.target.value)}
+                        />
+                        <InputError message={errors.adresse} className="mt-2" />
+                    </div>
 
                     <div className="mt-5">
                         <InputLabel htmlFor="email" value="Email" />
@@ -218,17 +273,29 @@ export default function Register({ pieces = [] }) {
                         <InputError message={errors.password_confirmation} className="mt-2" />
                     </div>
 
-                    <div className="mt-5 space-y-5">
-                        {pieces.filter((piece) => piece.user_type === data.user_type).map((piece) => (
+                    <div className="mt-6 space-y-5">
+                        <h3 className="text-sm font-semibold text-gray-900">Pièces à fournir</h3>
+                        {availablePieces.length === 0 && (
+                            <p className="text-sm text-gray-600">
+                                Aucune pièce n'est configurée pour ce type de compte. Contactez l'administration.
+                            </p>
+                        )}
+                        {availablePieces.map((piece) => (
                             <div key={piece.id}>
-                                <InputLabel htmlFor={`document-${piece.id}`} value={piece.nom} />
+                                <InputLabel
+                                    htmlFor={`document-${piece.id}`}
+                                    value={`${piece.libelle}${piece.isrequired ? ' *' : ' (optionnel)'}`}
+                                />
+                                {piece.description && (
+                                    <p className="mt-1 text-xs text-gray-500">{piece.description}</p>
+                                )}
                                 <input
                                     id={`document-${piece.id}`}
                                     type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png"
+                                    accept={pieceAccept(piece)}
                                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 file:me-4 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-indigo-700"
-                                    onChange={(event) => setData('documents', { ...data.documents, [piece.id]: event.target.files[0] ?? null })}
-                                    required={piece.obligatoire}
+                                    onChange={(event) => setDocument(piece.id, event.target.files[0])}
+                                    required={piece.isrequired}
                                 />
                                 <p className="mt-1 text-xs text-gray-500">PDF, JPG ou PNG — 10 Mo maximum.</p>
                                 <InputError message={errors[`documents.${piece.id}`]} className="mt-2" />

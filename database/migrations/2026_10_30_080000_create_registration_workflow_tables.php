@@ -91,8 +91,5 @@ return new class extends Migration
         Schema::dropIfExists('piece_a_fournir');
         Schema::dropIfExists('inscription');
         Schema::dropIfExists('transporteur');
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['user_type', 'country', 'raison_sociale', 'cfe_path', 'nom', 'prenom', 'statut', 'idtransporteur']);
-        });
     }
 };

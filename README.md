@@ -1,66 +1,104 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Gestion des inscriptions transporteurs
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Application Laravel 10 / Inertia.js / React 18 pour l'inscription et la validation
+des transporteurs (sociétés et particuliers).
 
-## About Laravel
+## Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.1+, Laravel 10
+- Inertia.js + React 18 + Vite + Tailwind CSS
+- PostgreSQL (ou MySQL / SQLite en développement)
+- `spatie/laravel-permission` pour les rôles
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Fonctionnement de l'inscription
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+1. Le visiteur choisit son type de compte : **société** ou **particulier**.
+2. Les pays proposés viennent de la table `pays`.
+3. Les pièces à fournir viennent de la table `piece_a_fournir` :
+   - `CFE` pour les sociétés ;
+   - `CNI` pour les particuliers.
+4. Les fichiers acceptés sont configurables par pièce via la colonne `extension`
+   (PDF, JPG, JPEG et PNG par défaut), dans la limite de 10 Mo.
+5. Le dossier est créé avec le statut `pending`, le compte utilisateur aussi.
+6. L'utilisateur vérifie son email via un lien signé.
+7. Un administrateur valide ou rejette le dossier depuis `/admin/registrations`.
+8. En cas de rejet, le demandeur peut corriger et resoumettre son dossier depuis
+   la page de suivi (`/registration/status`).
 
-## Learning Laravel
+Le numéro de dossier (`DOS-AAAAMMJJ-XXXXXX`) et les clés métier
+(`keyinscription`, `keytransporteur`, `keypieceinscription`, `keyuser`) sont
+générés automatiquement par les modèles.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Installation
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+```bash
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+Configurer la base de données dans `.env`, puis :
 
-## Laravel Sponsors
+```bash
+php artisan migrate --seed
+npm ci
+npm run build   # ou npm run dev en développement
+php artisan serve
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+> Si votre version de PHP est 8.5, le `composer.lock` actuel (Inertia 0.6)
+> nécessite `composer install --ignore-platform-req=php`. Une mise à jour vers
+> Inertia 1.x est recommandée à terme.
 
-### Premium Partners
+### Compte administrateur initial
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+Renseigner ces variables dans `.env` **avant** `php artisan migrate --seed` :
 
-## Contributing
+```dotenv
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASSWORD=mot-de-passe-fort
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+`DatabaseSeeder` crée alors ce compte avec le rôle `admin`. Si les variables
+sont vides, aucun administrateur n'est créé automatiquement.
 
-## Code of Conduct
+Les seeders créent également :
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+- les pays (`PaysSeeder`) ;
+- les pièces CFE et CNI (`PieceAFournirSeeder`) ;
+- les rôles `admin` et `transporteur` (`RoleSeeder`).
 
-## Security Vulnerabilities
+## Stockage des documents
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Les pièces sont stockées sur le disque `local`, dans
+`storage/app/registrations/{id_inscription}/`. Elles ne sont pas exposées
+publiquement : le téléchargement passe par une route protégée réservée aux
+administrateurs.
 
-## License
+## Routes principales
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+| Méthode | URL | Description |
+|---------|-----|-------------|
+| GET/POST | `/register` | Inscription transporteur |
+| GET/POST | `/login` | Connexion |
+| GET | `/registration/status` | Suivi de dossier |
+| GET | `/registration/verify/{id}/{hash}` | Vérification email (lien signé) |
+| GET | `/registration/{numeroDossier}/edit` | Formulaire de correction (email en query) |
+| POST | `/registration/{numeroDossier}` | Resoumission d'un dossier rejeté |
+| GET | `/admin/registrations` | Liste des dossiers (admin) |
+| POST | `/admin/registrations/{id}/approve` | Valider un dossier |
+| POST | `/admin/registrations/{id}/reject` | Rejeter un dossier |
+| GET | `/admin/registration-documents/{piece}/download` | Télécharger une pièce |
+
+## Tests
+
+Les tests utilisent SQLite en mémoire (`phpunit.xml`) et ne touchent jamais à la
+base de développement :
+
+```bash
+php artisan test
+```
+
+Couverture fonctionnelle : inscription dynamique avec pièces, pièce obligatoire
+manquante, type de fichier invalide, connexion bloquée/autorisée, vérification
+email, approbation/rejet administrateur et resoumission d'un dossier rejeté.
