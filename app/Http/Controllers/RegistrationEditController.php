@@ -166,7 +166,7 @@ class RegistrationEditController extends Controller
 
         return redirect()
             ->route('registration.status')
-            ->with('status', 'Votre dossier a été resoumis pour validation.');
+            ->with('success', 'Votre dossier a été resoumis pour validation.');
     }
 
     private function findRejected(string $email, string $numeroDossier): Inscription

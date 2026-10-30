@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -29,8 +28,6 @@ class NewPasswordController extends Controller
 
     /**
      * Handle an incoming new password request.
-     *
-     * @throws \Illuminate\Validation\ValidationException
      */
     public function store(Request $request): RedirectResponse
     {
@@ -58,12 +55,16 @@ class NewPasswordController extends Controller
         // If the password was successfully reset, we will redirect the user back to
         // the application's home authenticated view. If there is an error we can
         // redirect them back to where they came from with their error message.
-        if ($status == Password::PASSWORD_RESET) {
-            return redirect()->route('login')->with('status', __($status));
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()->route('login')->with('success', 'Votre mot de passe a été réinitialisé. Vous pouvez vous connecter.');
         }
 
-        throw ValidationException::withMessages([
-            'email' => [trans($status)],
-        ]);
+        $message = match ($status) {
+            Password::INVALID_TOKEN => 'Ce lien de réinitialisation est invalide ou expiré.',
+            Password::INVALID_USER => 'Aucun compte ne correspond à cette adresse email.',
+            default => __($status),
+        };
+
+        return back()->with('error', $message);
     }
 }

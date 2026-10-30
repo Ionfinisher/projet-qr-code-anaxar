@@ -1,3 +1,5 @@
+import FlashAlerts from '@/Components/FlashAlerts';
+
 export default function Guest({ children }) {
     return (
         <div className="min-h-screen bg-gray-950 md:grid md:grid-cols-2">
@@ -40,6 +42,8 @@ export default function Guest({ children }) {
                     {children}
                 </div>
             </main>
+
+            <FlashAlerts />
         </div>
     );
 }
