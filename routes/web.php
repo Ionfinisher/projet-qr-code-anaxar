@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
+use App\Http\Controllers\RegistrationEditController;
+use App\Http\Controllers\RegistrationStatusController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -28,6 +31,22 @@ Route::get('/', function () {
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
 })->middleware(['auth', 'verified'])->name('dashboard');
+
+Route::get('/registration/status', [RegistrationStatusController::class, 'create'])->name('registration.status');
+Route::get('/registration/verify/{id}/{hash}', [RegistrationStatusController::class, 'verify'])
+    ->middleware('signed')
+    ->name('registration.verification');
+Route::get('/registration/status/search', [RegistrationStatusController::class, 'show'])->name('registration.status.search');
+Route::get('/registration/{numeroDossier}/edit', [RegistrationEditController::class, 'edit'])->name('registration.edit');
+Route::post('/registration/{numeroDossier}', [RegistrationEditController::class, 'update'])->name('registration.update');
+
+Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/registrations', [AdminRegistrationController::class, 'index'])->name('registrations.index');
+    Route::get('/registrations/{inscription}', [AdminRegistrationController::class, 'show'])->name('registrations.show');
+    Route::post('/registrations/{inscription}/approve', [AdminRegistrationController::class, 'approve'])->name('registrations.approve');
+    Route::post('/registrations/{inscription}/reject', [AdminRegistrationController::class, 'reject'])->name('registrations.reject');
+    Route::get('/registration-documents/{piece}/download', [AdminRegistrationController::class, 'download'])->name('registrations.documents.download');
+});
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

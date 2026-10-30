@@ -32,6 +32,14 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        if (! $request->user()->isApproved() && ! $request->user()->hasRole('admin')) {
+            Auth::logout();
+
+            return back()->withErrors([
+                'email' => 'Votre compte est encore en cours de validation.',
+            ]);
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(RouteServiceProvider::HOME);

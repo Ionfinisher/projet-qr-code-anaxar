@@ -2,13 +2,13 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasApiTokens, HasFactory, Notifiable;
 
@@ -18,9 +18,22 @@ class User extends Authenticatable
      * @var array<int, string>
      */
     protected $fillable = [
-        'name',
+        'keyuser',
+        'nom',
+        'prenom',
         'email',
         'password',
+        'telephone',
+        'adresse',
+        'access_token',
+        'idpays',
+        'idtransporteur',
+        'statut',
+        'created_by',
+        'updated_by',
+        'firebase_token',
+        'name',
+        'user_type',
     ];
 
     /**
@@ -42,4 +55,19 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
+
+    public function transporteur()
+    {
+        return $this->belongsTo(Transporteur::class, 'id');
+    }
+
+    public function pays()
+    {
+        return $this->belongsTo(Pays::class, 'idpays');
+    }
+
+    public function isApproved(): bool
+    {
+        return $this->statut === null || $this->statut === 'approved';
+    }
 }

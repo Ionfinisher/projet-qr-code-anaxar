@@ -6,8 +6,12 @@ import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import { Head, Link, useForm } from '@inertiajs/react';
+import { useState } from 'react';
+import { EyeIcon, EyeSlashIcon } from '@phosphor-icons/react';
 
 export default function Login({ status, canResetPassword }) {
+    const [showPassword, setShowPassword] = useState(false);
+
     const { data, setData, post, processing, errors, reset } = useForm({
         email: '',
         password: '',
@@ -26,9 +30,18 @@ export default function Login({ status, canResetPassword }) {
         post(route('login'));
     };
 
+    const togglePassword = () => {
+        setShowPassword(!showPassword);
+    };
+
     return (
         <GuestLayout>
             <Head title="Log in" />
+
+            <div className="mb-8">
+                <h2 className="text-3xl font-extrabold tracking-tight text-gray-900">Se connecter</h2>
+                <p className="mt-2 text-sm text-gray-600">Transporteurs, transitaires et administrateurs du port.</p>
+            </div>
 
             {status && <div className="mb-4 font-medium text-sm text-green-600">{status}</div>}
 
@@ -51,17 +64,22 @@ export default function Login({ status, canResetPassword }) {
                 </div>
 
                 <div className="mt-4">
-                    <InputLabel htmlFor="password" value="Password" />
+                    <InputLabel htmlFor="password" value="Mot de passe" />
+                    <div className="relative">
+                        <TextInput
+                            id="password"
+                            type={showPassword ? 'text' : 'password'}
+                            name="password"
+                            value={data.password}
+                            className="mt-1 block w-full"
+                            autoComplete="current-password"
+                            onChange={(e) => setData('password', e.target.value)}
+                        />
+                        <span className="absolute end-4 top-1/2 cursor-pointer -translate-y-1/2" onClick={togglePassword}>
+                            {showPassword ? <EyeIcon /> : <EyeSlashIcon />}
+                        </span>
+                    </div>
 
-                    <TextInput
-                        id="password"
-                        type="password"
-                        name="password"
-                        value={data.password}
-                        className="mt-1 block w-full"
-                        autoComplete="current-password"
-                        onChange={(e) => setData('password', e.target.value)}
-                    />
 
                     <InputError message={errors.password} className="mt-2" />
                 </div>
@@ -73,23 +91,29 @@ export default function Login({ status, canResetPassword }) {
                             checked={data.remember}
                             onChange={(e) => setData('remember', e.target.checked)}
                         />
-                        <span className="ms-2 text-sm text-gray-600">Remember me</span>
+                        <span className="ms-2 text-sm text-indigo-900">Se souvenir de moi</span>
                     </label>
                 </div>
 
-                <div className="flex items-center justify-end mt-4">
+                <div className="flex flex-col items-center justify-end mt-4">
+
+                    <PrimaryButton className="w-full flex justify-center mb-4" disabled={processing}>
+                        Se connecter
+                    </PrimaryButton>
+
+                    <Link
+                        href={route('register')}
+                        className="w-full py-1 rounded-md bg-gray-100 border border-gray-600 flex justify-center mb-4" disabled={processing}>
+                        Créer un compte transporteur
+                    </Link>
                     {canResetPassword && (
                         <Link
                             href={route('password.request')}
-                            className="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            className="underline text-sm text-indigo-900 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                         >
-                            Forgot your password?
+                            Mot de passe oublié?
                         </Link>
                     )}
-
-                    <PrimaryButton className="ms-4" disabled={processing}>
-                        Log in
-                    </PrimaryButton>
                 </div>
             </form>
         </GuestLayout>
