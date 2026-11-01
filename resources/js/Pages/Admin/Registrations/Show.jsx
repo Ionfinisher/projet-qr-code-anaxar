@@ -8,7 +8,7 @@ const STATUS_LABELS = {
     rejected: 'À corriger',
 };
 
-export default function Show({ registration }) {
+export default function Show({ auth, registration }) {
     const rejectForm = useForm({ raison: '' });
     const approve = () =>
         window.confirm('Valider ce dossier ?') &&
@@ -20,6 +20,7 @@ export default function Show({ registration }) {
 
     return (
         <AuthenticatedLayout
+            user={auth.user}
             header={
                 <h2 className="text-xl font-semibold leading-tight text-gray-800">
                     Dossier {registration.numero_dossier}

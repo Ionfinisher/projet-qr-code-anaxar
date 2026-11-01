@@ -8,9 +8,9 @@ const STATUS_LABELS = {
     rejected: 'À corriger',
 };
 
-export default function Index({ registrations }) {
+export default function Index({ auth, registrations }) {
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Dossiers d'inscription</h2>}>
+        <AuthenticatedLayout user={auth.user} header={<h2 className="text-xl font-semibold leading-tight text-gray-800">Dossiers d'inscription</h2>}>
             <Head title="Dossiers d'inscription" />
             <div className="mx-auto max-w-7xl p-6">
                 <div className="overflow-hidden bg-white shadow-sm sm:rounded-lg">
