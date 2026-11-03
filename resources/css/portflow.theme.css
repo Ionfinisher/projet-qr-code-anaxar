@@ -1,0 +1,18 @@
+/* Tailwind CSS v4 : couleurs PortFlow. Dans le CSS principal de l'application :
+     @import "tailwindcss";
+     @import "./portflow/styles/portflow.theme.css";
+     @import "./portflow/styles/portflow.css";
+     @source "./portflow";          (si le dossier n'est pas détecté automatiquement) */
+@theme {
+    --color-brand-50: #fff5ef;
+    --color-brand-100: #ffe8dc;
+    --color-brand-200: #ffcdb5;
+    --color-brand-300: #ffa983;
+    --color-brand-400: #ff8150;
+    --color-brand-500: #ff5b1f;
+    --color-brand-600: #cf4310;
+    --color-brand-700: #a9360d;
+    --color-brand-800: #852c0f;
+    --color-brand-900: #6b2610;
+    --color-brand-950: #3a1106;
+}

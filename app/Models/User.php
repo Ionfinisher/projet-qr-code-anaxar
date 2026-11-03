@@ -20,6 +20,10 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUS_ACTIVE = 'active';
+
+    public const STATUS_INACTIVE = 'inactive';
+
     protected string $keyColumn = 'keyuser';
 
     /**
@@ -44,6 +48,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'firebase_token',
         'name',
         'user_type',
+        'must_change_password',
     ];
 
     /**
@@ -66,6 +71,7 @@ class User extends Authenticatable implements MustVerifyEmail
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'must_change_password' => 'boolean',
     ];
 
     public function transporteur()
@@ -80,11 +86,28 @@ class User extends Authenticatable implements MustVerifyEmail
 
     public function isApproved(): bool
     {
-        return $this->statut === null || $this->statut === self::STATUS_APPROVED;
+        return $this->statut === null
+            || $this->statut === self::STATUS_APPROVED
+            || $this->statut === self::STATUS_ACTIVE;
     }
 
     public function isAdmin(): bool
     {
         return $this->hasRole('admin');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(self::class, 'created_by');
+    }
+
+    public function createdUsers()
+    {
+        return $this->hasMany(self::class, 'created_by');
+    }
+
+    public function isActive(): bool
+    {
+        return $this->statut !== self::STATUS_INACTIVE;
     }
 }

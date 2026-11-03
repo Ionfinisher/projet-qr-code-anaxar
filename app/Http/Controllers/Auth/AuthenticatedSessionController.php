@@ -41,14 +41,21 @@ class AuthenticatedSessionController extends Controller
         if (! $user->isApproved() && ! $user->isAdmin()) {
             Auth::logout();
 
-            $message = $user->hasVerifiedEmail()
+            $message = $user->statut === \App\Models\User::STATUS_INACTIVE
+                ? 'Votre compte est désactivé.'
+                : ($user->hasVerifiedEmail()
                 ? 'Votre dossier est encore en cours de validation.'
-                : 'Veuillez vérifier votre adresse email avant de vous connecter.';
+                : 'Veuillez vérifier votre adresse email avant de vous connecter.');
 
             return back()->with('error', $message);
         }
 
         $request->session()->regenerate();
+
+        if ($user->must_change_password) {
+            return redirect()->route('profile.edit')
+                ->with('success', 'Vous devez modifier votre mot de passe temporaire.');
+        }
 
         return redirect()->intended(RouteServiceProvider::HOME)->with('success', 'Connexion réussie.');
     }

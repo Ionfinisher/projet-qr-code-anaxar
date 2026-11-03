@@ -1,0 +1,44 @@
+/* PortFlow — compléments CSS (indépendants de la version de Tailwind) :
+   animations des fenêtres, scanner et barrière de la guérite, thème des fenêtres SweetAlert2.
+   À importer après le CSS Tailwind de l'application. */
+
+@keyframes pf-fade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes pf-pop { from { opacity: 0; transform: translateY(8px) scale(.98) } to { opacity: 1; transform: none } }
+@keyframes pf-up { from { transform: translateY(24px); opacity: .4 } to { transform: none; opacity: 1 } }
+@keyframes pf-left { from { transform: translateX(32px); opacity: .4 } to { transform: none; opacity: 1 } }
+@keyframes pf-scan { 0% { top: 8% } 50% { top: 88% } 100% { top: 8% } }
+@keyframes pf-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+
+.pf-anim-fade { animation: pf-fade .18s ease-out both }
+.pf-anim-pop { animation: pf-pop .2s cubic-bezier(.2, .8, .2, 1) both }
+.pf-anim-drawer { animation: pf-up .24s cubic-bezier(.2, .8, .2, 1) both }
+@media (min-width: 640px) { .pf-anim-drawer { animation-name: pf-left } }
+
+/* Scanner de QR (guérite) : ligne de balayage */
+.pf-scan-line { position: absolute; left: 10%; right: 10%; height: 2px; background: #ff5b1f; box-shadow: 0 0 12px 2px rgba(255, 91, 31, .7); animation: pf-scan 2.4s ease-in-out infinite }
+.pf-live-dot { animation: pf-pulse 1.4s ease-in-out infinite }
+
+/* Barrière (animation d'ouverture) */
+.pf-gate-arm { transform-origin: 70px 92px; transition: transform .9s cubic-bezier(.2, .8, .2, 1) }
+.pf-gate-svg.is-open .pf-gate-arm { transform: rotate(-78deg) }
+.pf-gate-light { fill: #f43f5e; transition: fill .3s }
+.pf-gate-svg.is-open .pf-gate-light { fill: #10b981 }
+
+@media (prefers-reduced-motion: reduce) {
+  .pf-anim-fade, .pf-anim-pop, .pf-anim-drawer, .pf-scan-line, .pf-live-dot { animation: none }
+  .pf-gate-arm { transition: none }
+}
+
+/* ── SweetAlert2 : fenêtres au style PortFlow ── */
+.swal2-container.pf-swal-container.swal2-backdrop-show { background: rgba(2, 6, 23, .55) }
+.swal2-popup.pf-swal { width: min(30rem, calc(100vw - 2rem)); padding: 1.5rem 1.5rem 1.25rem; border-radius: 1.25rem; font-family: inherit; color: #334155; box-shadow: 0 24px 64px rgba(15, 23, 42, .28) }
+.swal2-popup.pf-swal.pf-swal--form { width: min(34rem, calc(100vw - 2rem)) }
+.swal2-popup.pf-swal .swal2-icon { margin: .5rem auto .25rem; transform: scale(.82) }
+.swal2-title.pf-swal-title { padding: .5rem 0 0; font-size: 1.25rem; font-weight: 700; line-height: 1.35; color: #0f172a }
+.swal2-html-container.pf-swal-html { margin: .75rem 0 0; padding: 0; font-size: .9375rem; line-height: 1.55; color: #475569; overflow-wrap: anywhere }
+.swal2-actions.pf-swal-actions { gap: .5rem; width: 100%; margin: 1.5rem 0 0; flex-wrap: wrap }
+.swal2-actions.pf-swal-actions > button { margin: 0 }
+.swal2-validation-message.pf-swal-validation { margin: .75rem 0 0; border-radius: .75rem; background: #fff1f2; color: #9f1239; font-size: .875rem }
+body.swal2-toast-shown .swal2-container.swal2-top-end.pf-swal-toast-container { top: 4.5rem } /* sous la barre supérieure : menus et horloge restent accessibles */
+.swal2-popup.swal2-toast.pf-swal-toast { padding: .75rem 1rem; border-radius: 1rem; font-family: inherit; box-shadow: 0 12px 32px rgba(15, 23, 42, .18) }
+.swal2-popup.swal2-toast.pf-swal-toast .swal2-title { font-size: .875rem; font-weight: 600; color: #0f172a; margin: 0 .5rem }

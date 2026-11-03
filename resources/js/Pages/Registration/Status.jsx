@@ -1,10 +1,19 @@
 import { useState } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
-import GuestLayout from '@/Layouts/GuestLayout';
-import InputError from '@/Components/InputError';
-import InputLabel from '@/Components/InputLabel';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
+import PublicLayout from '@/Layouts/PublicLayout';
+import { PageHeader } from '@/Components/ui/Navigation';
+import { Card } from '@/Components/ui/Card';
+import { Field, Input } from '@/Components/ui/Field';
+import { Button, buttonClass } from '@/Components/ui/Button';
+import { Badge } from '@/Components/ui/Badge';
+import { Alert, EmptyState } from '@/Components/ui/Feedback';
+import { Icon } from '@/Components/ui/Icon';
+
+const STATUS_BADGES = {
+    pending: { label: 'En cours de validation', tone: 'warn', icon: 'clock' },
+    approved: { label: 'Dossier validé', tone: 'ok', icon: 'check' },
+    rejected: { label: 'À compléter / Corriger', tone: 'bad', icon: 'triangle-alert' },
+};
 
 export default function Status({
     registration = null,
@@ -13,14 +22,8 @@ export default function Status({
     const [hasSearched, setHasSearched] = useState(registration !== null);
     const { data, setData, get, processing, errors } = useForm(lookup);
 
-    const updateField = (field) => (event) => {
-        setData(field, event.target.value);
-        setHasSearched(false);
-    };
-
-    const submit = (event) => {
-        event.preventDefault();
-
+    const submit = (e) => {
+        e.preventDefault();
         get(route('registration.status.search'), {
             preserveState: true,
             preserveScroll: true,
@@ -29,66 +32,130 @@ export default function Status({
         });
     };
 
+    const statusConfig = registration
+        ? STATUS_BADGES[registration.status] || { label: registration.status_label || registration.status, tone: 'neutral', icon: 'file-text' }
+        : null;
+
     return (
-        <GuestLayout>
-            <Head title="Suivre mon dossier" />
-            <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">Suivre mon dossier</h1>
-            <p className="mt-2 text-sm text-gray-600">Saisissez votre email et votre numéro de dossier.</p>
+        <PublicLayout wide={false}>
+            <Head title="Suivre ma demande d’inscription" />
 
-            <form onSubmit={submit} className="mt-8">
-                <div>
-                    <InputLabel htmlFor="email" value="Email" />
-                    <TextInput
-                        id="email"
-                        type="email"
-                        value={data.email}
-                        className="mt-1 block w-full"
-                        onChange={updateField('email')}
-                        required
-                    />
-                    <InputError message={errors.email} className="mt-2" />
-                </div>
-                <div className="mt-5">
-                    <InputLabel htmlFor="numero_dossier" value="Numéro de dossier" />
-                    <TextInput
-                        id="numero_dossier"
-                        value={data.numero_dossier}
-                        className="mt-1 block w-full"
-                        onChange={updateField('numero_dossier')}
-                        required
-                    />
-                    <InputError message={errors.numero_dossier} className="mt-2" />
-                </div>
-                <PrimaryButton className="mt-6" disabled={processing}>
-                    Rechercher
-                </PrimaryButton>
-            </form>
+            <div className="flex flex-col gap-6">
+                <PageHeader
+                    eyebrow="Espace public"
+                    title="Suivre ma demande d’inscription"
+                    subtitle="Consultez l’état de votre demande et complétez-la si l’administration vous le demande."
+                    className="mb-0"
+                />
 
-            {hasSearched && registration && (
-                <div className="mt-8 rounded-md border border-gray-200 bg-gray-50 p-4">
-                    <p className="text-sm text-gray-600">Dossier {registration.numero_dossier}</p>
-                    <p className="mt-1 font-semibold text-gray-900">
-                        Statut : {registration.status_label || registration.status}
-                    </p>
-                    {registration.rejection_reason && (
-                        <p className="mt-3 text-sm text-red-700">Motif : {registration.rejection_reason}</p>
-                    )}
-                    {registration.can_edit && registration.edit_url && (
-                        <Link
-                            href={registration.edit_url}
-                            className="mt-4 inline-block text-sm font-semibold text-indigo-700 underline"
-                        >
-                            Modifier mon dossier
-                        </Link>
-                    )}
-                </div>
-            )}
+                <Card as="form" onSubmit={submit} className="flex flex-col gap-4">
+                    <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-[1fr_1.3fr_auto]">
+                        <Field id="t-ref" label="Référence de dossier" error={errors.numero_dossier}>
+                            <Input
+                                id="t-ref"
+                                mono
+                                placeholder="INS-XXXXXX"
+                                value={data.numero_dossier}
+                                onChange={(e) => {
+                                    setData('numero_dossier', e.target.value.toUpperCase());
+                                    setHasSearched(false);
+                                }}
+                                required
+                            />
+                        </Field>
 
-            {hasSearched && registration === null && data.email && data.numero_dossier && !errors.email && !errors.numero_dossier && (
-                <p className="mt-6 text-sm text-red-700">
-                    Aucun dossier ne correspond à ces informations.
-                </p>
-            )}
-        </GuestLayout>
+                        <Field id="t-contact" label="E-mail de la demande" error={errors.email}>
+                            <Input
+                                id="t-contact"
+                                type="email"
+                                autoComplete="username"
+                                placeholder="contact@societe.tg"
+                                value={data.email}
+                                onChange={(e) => {
+                                    setData('email', e.target.value);
+                                    setHasSearched(false);
+                                }}
+                                required
+                            />
+                        </Field>
+
+                        <Button type="submit" icon="search" loading={processing} className="h-10">
+                            {processing ? 'Recherche…' : 'Consulter'}
+                        </Button>
+                    </div>
+                </Card>
+
+                {hasSearched && registration && (
+                    <div className="flex flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                            <div>
+                                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                                    Numéro de dossier
+                                </span>
+                                <h2 className="font-mono text-xl font-bold tracking-tight text-slate-900">
+                                    {registration.numero_dossier}
+                                </h2>
+                            </div>
+                            <Badge tone={statusConfig.tone} icon={statusConfig.icon} size="lg">
+                                {statusConfig.label}
+                            </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
+                            <div>
+                                <span className="block text-xs text-slate-500">Adresse e-mail</span>
+                                <span className="font-medium text-slate-900 font-mono">{registration.email || data.email}</span>
+                            </div>
+                            <div>
+                                <span className="block text-xs text-slate-500">Statut du traitement</span>
+                                <span className="font-medium text-slate-900">{registration.status_label}</span>
+                            </div>
+                        </div>
+
+                        {registration.rejection_reason && (
+                            <Alert tone="bad" icon="file-up" title="Compléments demandés par l’administration">
+                                {registration.rejection_reason}
+                            </Alert>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+                            {registration.can_edit && registration.edit_url && (
+                                <Link
+                                    href={registration.edit_url}
+                                    className={buttonClass({ variant: 'primary' })}
+                                >
+                                    <Icon name="pencil" size={18} /> Modifier / Compléter mon dossier
+                                </Link>
+                            )}
+
+                            {registration.status === 'approved' && typeof route === 'function' && route().has('login') && (
+                                <Link
+                                    href={route('login')}
+                                    className={buttonClass({ variant: 'primary' })}
+                                >
+                                    <Icon name="log-in" size={18} /> Se connecter à mon compte
+                                </Link>
+                            )}
+
+                            <Link
+                                href={route('login')}
+                                className={buttonClass({ variant: 'ghost' })}
+                            >
+                                Retour à la connexion
+                            </Link>
+                        </div>
+                    </div>
+                )}
+
+                {hasSearched && registration === null && (
+                    <EmptyState
+                        icon="file-search"
+                        title="Dossier introuvable"
+                    >
+                        Aucun dossier ne correspond à ces informations. Vérifiez le numéro de dossier et l’adresse e-mail renseignés.
+                    </EmptyState>
+                )}
+            </div>
+        </PublicLayout>
     );
 }
