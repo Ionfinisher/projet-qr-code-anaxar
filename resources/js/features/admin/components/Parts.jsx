@@ -1,6 +1,6 @@
 // Éléments communs des modules d'administration.
 import { useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Badge, EmptyState, Icon } from '../../../components/ui/index.js';
+import { Badge, EmptyState, Icon } from '../../../Components/ui/index.js';
 import { urgencyOf } from '../selectors.js';
 import { cn } from '../../../lib/cn.js';
 

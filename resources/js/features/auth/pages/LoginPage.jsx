@@ -4,7 +4,7 @@ import { notify } from '../../../lib/alerts.js';
 import { useNav, AppLink, hrefOf } from '../../../lib/navigation.jsx';
 import { HOME_OF_SPACE } from '../../../routes/routes.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Field, Input, PasswordInput, Button, Alert, buttonClass, Icon } from '../../../components/ui/index.js';
+import { Field, Input, PasswordInput, Button, Alert, buttonClass, Icon } from '../../../Components/ui/index.js';
 import { DemoAccounts } from '../components/DemoAccounts.jsx';
 import { useAuthApi } from '../api.js';
 

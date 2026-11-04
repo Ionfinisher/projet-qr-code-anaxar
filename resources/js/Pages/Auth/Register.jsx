@@ -25,12 +25,19 @@ export default function Register({ pays = [], pieces = [] }) {
 
     const { data, setData, post, processing, errors, reset } = useForm({
         user_type: 'societe',
-        idpays: pays[0]?.id ?? '',
+        idpays: '',
         raison_sociale: '',
+        nif: '',
+        rccm: '',
+        representant_nom: '',
+        representant_prenom: '',
+        fonction_representant: '',
         nom: '',
         prenom: '',
         telephone: '',
         adresse: '',
+        ville: '',
+        nombre_camions: '',
         email: '',
         password: '',
         password_confirmation: '',
@@ -48,9 +55,9 @@ export default function Register({ pays = [], pieces = [] }) {
         const errorKeys = Object.keys(errors);
         if (errorKeys.length === 0) return;
 
-        if (errorKeys.some((k) => ['user_type', 'idpays', 'raison_sociale', 'nom', 'prenom', 'telephone', 'adresse'].includes(k))) {
+        if (errorKeys.some((k) => ['user_type', 'raison_sociale', 'nif', 'rccm', 'representant_nom', 'representant_prenom', 'fonction_representant', 'nom', 'prenom', 'adresse', 'ville', 'nombre_camions'].includes(k))) {
             setStep(0);
-        } else if (errorKeys.some((k) => ['email', 'password', 'password_confirmation'].includes(k))) {
+        } else if (errorKeys.some((k) => ['idpays', 'telephone', 'email', 'password', 'password_confirmation'].includes(k))) {
             setStep(1);
         } else if (errorKeys.some((k) => k.startsWith('documents.'))) {
             setStep(2);
@@ -75,16 +82,24 @@ export default function Register({ pays = [], pieces = [] }) {
     const validateStep = (s) => {
         const errs = {};
         if (s === 0) {
-            if (data.user_type === 'societe' && !data.raison_sociale.trim()) {
+            const business = ['societe', 'transitaire'].includes(data.user_type);
+            if (business && !data.raison_sociale.trim()) {
                 errs.raison_sociale = 'La raison sociale est requise.';
             }
+            if (business && !data.nif.trim()) errs.nif = 'Le NIF est requis.';
+            if (business && !data.rccm.trim()) errs.rccm = 'Le numéro RCCM est requis.';
+            if (business && !data.adresse.trim()) errs.adresse = 'L’adresse du siège est requise.';
+            if (business && !data.representant_prenom.trim()) errs.representant_prenom = 'Le prénom du représentant est requis.';
+            if (business && !data.representant_nom.trim()) errs.representant_nom = 'Le nom du représentant est requis.';
+            if (business && !data.fonction_representant.trim()) errs.fonction_representant = 'La fonction du représentant est requise.';
+            if (business && !data.ville.trim()) errs.ville = 'La ville est requise.';
             if (data.user_type === 'particulier') {
                 if (!data.nom.trim()) errs.nom = 'Le nom est requis.';
                 if (!data.prenom.trim()) errs.prenom = 'Le prénom est requis.';
             }
+        } else if (s === 1) {
             if (!data.idpays) errs.idpays = 'Veuillez sélectionner un pays.';
             if (!data.telephone.trim()) errs.telephone = 'Le numéro de téléphone est requis.';
-        } else if (s === 1) {
             if (!data.email.trim()) errs.email = 'L’adresse e-mail est requise.';
             if (!data.password) errs.password = 'Le mot de passe est requis.';
             if (data.password !== data.password_confirmation) {
@@ -232,38 +247,59 @@ export default function Register({ pays = [], pieces = [] }) {
                                 <RadioCards
                                     value={data.user_type}
                                     onChange={(val) => setData('user_type', val)}
-                                    columns={2}
+                                    columns={3}
                                     options={[
                                         {
                                             value: 'societe',
-                                            label: 'Société de transport / Transitaire',
-                                            description: 'Flotte de camions, plusieurs chauffeurs ou activités de transit.',
+                                        label: 'Entreprise de transport',
+                                        description: 'Société disposant d’une flotte de camions.',
                                             icon: 'building-2',
                                         },
                                         {
-                                            value: 'particulier',
-                                            label: 'Transporteur individuel',
-                                            description: 'Chauffeur propriétaire ou artisan transporteur indépendant.',
-                                            icon: 'user',
+                                        value: 'transitaire',
+                                        label: 'Transitaire · commissionnaire en douane',
+                                        description: 'Réserve pour le compte de transporteurs mandatés.',
+                                        icon: 'briefcase-business',
                                         },
+                                    {
+                                        value: 'particulier',
+                                        label: 'Transporteur particulier',
+                                        description: 'Propriétaire-exploitant d’un ou plusieurs camions.',
+                                        icon: 'user',
+                                    },
                                     ]}
                                 />
                             </div>
 
-                            {data.user_type === 'societe' ? (
-                                <Field
-                                    id="reg-raison"
-                                    label="Raison sociale de l’entreprise"
-                                    required
-                                    error={errors.raison_sociale || stepErrors.raison_sociale}
-                                >
-                                    <Input
-                                        id="reg-raison"
-                                        placeholder="Ex. Transports Togolais Réunis SARL"
-                                        value={data.raison_sociale}
-                                        onChange={(e) => setData('raison_sociale', e.target.value)}
-                                    />
-                                </Field>
+                            {['societe', 'transitaire'].includes(data.user_type) ? (
+                                <>
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <Field id="reg-raison" label="Raison sociale" required error={errors.raison_sociale || stepErrors.raison_sociale}>
+                                        <Input id="reg-raison" placeholder="Ex. Transports Togolais Réunis SARL" value={data.raison_sociale} onChange={(e) => setData('raison_sociale', e.target.value)} />
+                                    </Field>
+                                    <Field id="reg-nif" label="NIF" required hint="Numéro d’identification fiscale." error={errors.nif || stepErrors.nif}>
+                                        <Input id="reg-nif" value={data.nif} onChange={(e) => setData('nif', e.target.value.toUpperCase())} />
+                                    </Field>
+                                    <Field id="reg-rccm" label="N° RCCM" required hint="Ex. TG-LOM 2019 B 1234." error={errors.rccm || stepErrors.rccm}>
+                                        <Input id="reg-rccm" value={data.rccm} onChange={(e) => setData('rccm', e.target.value.toUpperCase())} />
+                                    </Field>
+                                    </div>
+                                    <Field id="reg-adresse" label="Adresse du siège" required error={errors.adresse || stepErrors.adresse}>
+                                    <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
+                                    </Field>
+                                    <p className="text-sm font-semibold text-slate-700">Représentant légal</p>
+                                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <Field id="reg-rep-prenom" label="Prénom" required error={errors.representant_prenom || stepErrors.representant_prenom}>
+                                        <Input id="reg-rep-prenom" value={data.representant_prenom} onChange={(e) => setData('representant_prenom', e.target.value)} />
+                                    </Field>
+                                    <Field id="reg-rep-nom" label="Nom" required error={errors.representant_nom || stepErrors.representant_nom}>
+                                        <Input id="reg-rep-nom" value={data.representant_nom} onChange={(e) => setData('representant_nom', e.target.value)} />
+                                    </Field>
+                                    <Field id="reg-rep-fonction" label="Fonction" required error={errors.fonction_representant || stepErrors.fonction_representant}>
+                                        <Input id="reg-rep-fonction" placeholder="Ex. Gérante" value={data.fonction_representant} onChange={(e) => setData('fonction_representant', e.target.value)} />
+                                    </Field>
+                                    </div>
+                                </>
                             ) : (
                                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                     <Field
@@ -295,57 +331,62 @@ export default function Register({ pays = [], pieces = [] }) {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                                <Field
-                                    id="reg-pays"
-                                    label="Pays d’immatriculation"
-                                    required
-                                    error={errors.idpays || stepErrors.idpays}
-                                >
-                                    <Select
-                                        id="reg-pays"
-                                        value={data.idpays}
-                                        onChange={(e) => setData('idpays', e.target.value)}
-                                    >
-                                        {pays.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.nom} {p.indicatif ? `(${p.indicatif})` : ''}
-                                            </option>
-                                        ))}
-                                    </Select>
+                            {['societe', 'transitaire'].includes(data.user_type) ? (
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <Field id="reg-ville" label="Ville" required error={errors.ville || stepErrors.ville}>
+                                        <Input id="reg-ville" placeholder="Ex. Lomé" value={data.ville} onChange={(e) => setData('ville', e.target.value)} />
+                                    </Field>
+                                    <Field id="reg-camions" label="Nombre de camions" optional error={errors.nombre_camions || stepErrors.nombre_camions}>
+                                        <Input id="reg-camions" type="number" min="0" max="5000" value={data.nombre_camions} onChange={(e) => setData('nombre_camions', e.target.value)} />
+                                    </Field>
+                                </div>
+                            ) : (
+                                <Field id="reg-adresse" label="Adresse du siège / Domicile" error={errors.adresse || stepErrors.adresse}>
+                                    <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
                                 </Field>
-
-                                <Field
-                                    id="reg-phone"
-                                    label="Numéro de téléphone"
-                                    required
-                                    error={errors.telephone || stepErrors.telephone}
-                                    hint="Joignable pour le suivi et les SMS de validation"
-                                >
-                                    <Input
-                                        id="reg-phone"
-                                        type="tel"
-                                        placeholder="Ex. +228 90 11 22 33"
-                                        value={data.telephone}
-                                        onChange={(e) => setData('telephone', e.target.value)}
-                                    />
-                                </Field>
-                            </div>
-
-                            <Field id="reg-adresse" label="Adresse du siège / Domicile" error={errors.adresse}>
-                                <Input
-                                    id="reg-adresse"
-                                    placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé"
-                                    value={data.adresse}
-                                    onChange={(e) => setData('adresse', e.target.value)}
-                                />
-                            </Field>
+                            )}
                         </div>
                     )}
 
                     {/* Step 1: Contact & Sécurité */}
                     {step === 1 && (
                         <div className="flex flex-col gap-5">
+                            <Field
+                                id="reg-phone"
+                                label="Téléphone mobile"
+                                required
+                                error={errors.idpays || errors.telephone || stepErrors.idpays || stepErrors.telephone}
+                                hint="Reçoit les SMS et sert d’identifiant de contact."
+                            >
+                                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                                    <Select
+                                        id="reg-pays"
+                                        value={data.idpays}
+                                        onChange={(e) => setData('idpays', e.target.value)}
+                                        aria-label="Pays et indicatif téléphonique"
+                                        aria-invalid={errors.idpays || stepErrors.idpays ? 'true' : undefined}
+                                    >
+                                        <option value="" disabled>
+                                            Sélectionner un pays
+                                        </option>
+                                        {pays.map((p) => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.nom} {p.indicatif ? `· +${String(p.indicatif).replace(/^\+/, '')}` : ''}
+                                            </option>
+                                        ))}
+                                    </Select>
+                                    <Input
+                                        id="reg-phone-number"
+                                        type="tel"
+                                        autoComplete="tel"
+                                        placeholder="90 11 22 33"
+                                        value={data.telephone}
+                                        onChange={(e) => setData('telephone', e.target.value)}
+                                        aria-invalid={errors.telephone || stepErrors.telephone ? 'true' : undefined}
+                                    />
+                                </div>
+                            </Field>
+
                             <Field
                                 id="reg-email"
                                 label="Adresse e-mail professionnelle"

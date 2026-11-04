@@ -1,8 +1,8 @@
 import { useRef } from 'react';
 import { copyText } from '../../../../lib/download.js';
 import { AppLink } from '../../../../lib/navigation.jsx';
-import { Button, Icon, buttonClass } from '../../../../components/ui/index.js';
-import { SentMessages } from '../../../../components/domain/index.js';
+import { Button, Icon, buttonClass } from '../../../../Components/ui/index.js';
+import { SentMessages } from '../../../../Components/domain/index.js';
 
 /** Confirmation d'envoi (création ou mise à jour) : référence à conserver et messages envoyés. */
 export function RegisterDone({ res, updated }) {

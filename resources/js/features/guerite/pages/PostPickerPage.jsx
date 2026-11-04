@@ -1,8 +1,8 @@
 import { hasPerm } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Icon } from '../../../components/ui/index.js';
-import { Logo } from '../../../components/domain/index.js';
+import { Icon } from '../../../Components/ui/index.js';
+import { Logo } from '../../../Components/domain/index.js';
 import { TopBar, Spacer, SkipLink } from '../../../layouts/parts.jsx';
 import { useAuthApi } from '../../auth/api.js';
 import { useGateApi } from '../api.js';

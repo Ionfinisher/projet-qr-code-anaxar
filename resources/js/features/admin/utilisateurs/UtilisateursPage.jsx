@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ACCOUNT_KINDS, accountName, personName, formatPhone, fmtAgo } from '../../../lib/domain.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Segmented, SearchInput, DataTable, Badge, Avatar, Button, EmptyState } from '../../../components/ui/index.js';
+import { PageHeader, Segmented, SearchInput, DataTable, Badge, Avatar, Button, EmptyState } from '../../../Components/ui/index.js';
 import { RequirePerm, ListTools } from '../components/Parts.jsx';
 import { UserDrawer } from './UserDrawer.jsx';
 import { AddUserDrawer } from './AddUserDrawer.jsx';

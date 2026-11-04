@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { accountName } from '../../../lib/domain.js';
 import { confirmAction, notify } from '../../../lib/alerts.js';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, Badge, Field, Input, Textarea, Segmented, Alert, Avatar, fieldProps } from '../../../components/ui/index.js';
+import { Drawer, Button, Badge, Field, Input, Textarea, Segmented, Alert, Avatar, fieldProps } from '../../../Components/ui/index.js';
 import { useAdminApi } from '../api.js';
 import { PermMatrix } from './PermMatrix.jsx';
 

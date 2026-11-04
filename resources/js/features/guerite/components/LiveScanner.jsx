@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { decodeVideoFrame } from '../../../lib/qrscan.js';
-import { Button, Icon } from '../../../components/ui/index.js';
+import { Button, Icon } from '../../../Components/ui/index.js';
 
 export function LiveScanner({ onCode, onClose }) {
   const videoRef = useRef(null);

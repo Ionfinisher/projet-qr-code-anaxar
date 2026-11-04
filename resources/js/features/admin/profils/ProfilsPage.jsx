@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { PERM_LABEL } from '../../../lib/domain.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { PageHeader, Button, Badge, Icon } from '../../../components/ui/index.js';
+import { PageHeader, Button, Badge, Icon } from '../../../Components/ui/index.js';
 import { RequirePerm } from '../components/Parts.jsx';
 import { ProfileDrawer } from './ProfileDrawer.jsx';
 import { cn } from '../../../lib/cn.js';

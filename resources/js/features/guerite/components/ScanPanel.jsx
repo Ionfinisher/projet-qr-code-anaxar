@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { dayStr, statusOf, tamperToken } from '../../../lib/domain.js';
 import { decodeQrFromFile } from '../../../lib/qrscan.js';
-import { Button, Icon, controlClass } from '../../../components/ui/index.js';
+import { Button, Icon, controlClass } from '../../../Components/ui/index.js';
 import { cn } from '../../../lib/cn.js';
 import { LiveScanner } from './LiveScanner.jsx';
 

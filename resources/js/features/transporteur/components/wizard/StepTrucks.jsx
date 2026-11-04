@@ -2,8 +2,8 @@
 import { useMemo, useState } from 'react';
 import { COUNTRIES, ISO_TYPES, ISO_TYPE, parseContainer, parseBL, normalizePlate, licenseValid } from '../../../../lib/domain.js';
 import { notify } from '../../../../lib/alerts.js';
-import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, Icon, fieldProps } from '../../../../components/ui/index.js';
-import { ContainerNumber, Plate } from '../../../../components/domain/index.js';
+import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, Icon, fieldProps } from '../../../../Components/ui/index.js';
+import { ContainerNumber, Plate } from '../../../../Components/domain/index.js';
 import { cn } from '../../../../lib/cn.js';
 import { newTruck, parsePastedTrucks } from '../../demandeForm.js';
 import { TruckNo, SubTitle } from './WizardParts.jsx';

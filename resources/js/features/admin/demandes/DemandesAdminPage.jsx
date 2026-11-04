@@ -4,8 +4,8 @@ import { OPS, TERMINALS, DEM_STATUS, slotRange, relDay, dayStr, fmtAgo, accountN
 import { useNav } from '../../../lib/navigation.jsx';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Segmented, SearchInput, EmptyState, Drawer } from '../../../components/ui/index.js';
-import { StatusTag } from '../../../components/domain/index.js';
+import { PageHeader, Segmented, SearchInput, EmptyState, Drawer } from '../../../Components/ui/index.js';
+import { StatusTag } from '../../../Components/domain/index.js';
 import { RecordRow, ListTools, RequirePerm, UrgencyBadge } from '../components/Parts.jsx';
 import { ownerOf, demandeRdvs, plural } from '../selectors.js';
 import { DemandeAdminDetail } from './DemandeAdminDetail.jsx';

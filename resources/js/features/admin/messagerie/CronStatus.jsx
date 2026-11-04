@@ -1,5 +1,5 @@
 import { fmtAgo } from '../../../lib/domain.js';
-import { Alert } from '../../../components/ui/index.js';
+import { Alert } from '../../../Components/ui/index.js';
 
 /** Tâche planifiée (bin/cron.php) : relance des envois, purges, réinitialisation de la démonstration. */
 export function CronStatus({ cron, now, demo }) {

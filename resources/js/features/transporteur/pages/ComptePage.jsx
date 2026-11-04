@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { ACCOUNT_KINDS, COUNTRY, formatPhone, fmtDateTime, personName } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { PageHeader, Card, SectionTitle, KeyValue, Button } from '../../../components/ui/index.js';
-import { InscriptionDetail } from '../../../components/domain/index.js';
+import { PageHeader, Card, SectionTitle, KeyValue, Button } from '../../../Components/ui/index.js';
+import { InscriptionDetail } from '../../../Components/domain/index.js';
 import { ChangePasswordDrawer, useAuthApi } from '../../auth/index.js';
 
 const mono = v => <span className="font-mono">{v}</span>;

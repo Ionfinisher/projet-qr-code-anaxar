@@ -3,7 +3,7 @@ import { dayStr, fmtDayLong } from '../../../lib/domain.js';
 import { useNav } from '../../../lib/navigation.jsx';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Card, Button } from '../../../components/ui/index.js';
+import { PageHeader, Card, Button } from '../../../Components/ui/index.js';
 import { SlotPicker, SlotLegend } from '../components/SlotPicker.jsx';
 import { slotUsageFor, cap } from '../selectors.js';
 

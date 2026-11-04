@@ -4,8 +4,8 @@ import { ACCOUNT_KINDS, INS_STATUS, insName, fmtAgo } from '../../../lib/domain.
 import { useNav } from '../../../lib/navigation.jsx';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Segmented, SearchInput, EmptyState, Drawer, Icon } from '../../../components/ui/index.js';
-import { StatusTag, InscriptionDetail } from '../../../components/domain/index.js';
+import { PageHeader, Segmented, SearchInput, EmptyState, Drawer, Icon } from '../../../Components/ui/index.js';
+import { StatusTag, InscriptionDetail } from '../../../Components/domain/index.js';
 import { RecordRow, ListTools, RequirePerm } from '../components/Parts.jsx';
 import { InscriptionDecision } from './InscriptionDecision.jsx';
 

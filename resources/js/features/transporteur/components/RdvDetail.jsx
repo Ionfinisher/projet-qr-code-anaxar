@@ -7,8 +7,8 @@ import {
 import { notify } from '../../../lib/alerts.js';
 import { AppLink } from '../../../lib/navigation.jsx';
 import { useApi } from '../../../providers/PortFlowProvider.jsx';
-import { Alert, Badge, Button, Card, SectionTitle, KeyValue, Icon } from '../../../components/ui/index.js';
-import { GatePass, RdvStatusBadge, ContainerNumber, Plate, fileError, uploadFile } from '../../../components/domain/index.js';
+import { Alert, Badge, Button, Card, SectionTitle, KeyValue, Icon } from '../../../Components/ui/index.js';
+import { GatePass, RdvStatusBadge, ContainerNumber, Plate, fileError, uploadFile } from '../../../Components/domain/index.js';
 import { cn } from '../../../lib/cn.js';
 import { useTransporteurApi } from '../api.js';
 import { cap } from '../selectors.js';

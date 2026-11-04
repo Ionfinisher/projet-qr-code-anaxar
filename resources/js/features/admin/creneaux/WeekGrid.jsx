@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { slotRange, hhmm, fmtDayLong, fmtDayNum, fmtWeekday } from '../../../lib/domain.js';
-import { Meter } from '../../../components/ui/index.js';
+import { Meter } from '../../../Components/ui/index.js';
 import { cn } from '../../../lib/cn.js';
 
 const MONTH = new Intl.DateTimeFormat('fr-FR', { month: 'short', timeZone: 'UTC' });

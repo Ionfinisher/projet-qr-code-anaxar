@@ -1,5 +1,5 @@
 import { fmtDateTime } from '../../../../lib/domain.js';
-import { Badge, Icon } from '../../../../components/ui/index.js';
+import { Badge, Icon } from '../../../../Components/ui/index.js';
 import { cn } from '../../../../lib/cn.js';
 import { SOURCE } from '../../constants.js';
 

@@ -3,8 +3,8 @@ import { dayStr, statusOf, punctuality, relDay, fmtTime, fmtTimeS, fmtDayLong, E
 import { notify } from '../../../lib/alerts.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, StatCard, Card, SectionTitle, Button, Icon, buttonClass } from '../../../components/ui/index.js';
-import { DemoBanner } from '../../../components/domain/index.js';
+import { PageHeader, StatCard, Card, SectionTitle, Button, Icon, buttonClass } from '../../../Components/ui/index.js';
+import { DemoBanner } from '../../../Components/domain/index.js';
 import { cn } from '../../../lib/cn.js';
 import { useGateApi } from '../api.js';
 import { useGateSession } from '../GateSession.jsx';

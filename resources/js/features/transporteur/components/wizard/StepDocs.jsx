@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { DOCS } from '../../../../lib/domain.js';
 import { notify } from '../../../../lib/alerts.js';
 import { useApi, useServerConfig } from '../../../../providers/PortFlowProvider.jsx';
-import { Alert, Button } from '../../../../components/ui/index.js';
-import { DocumentUpload, sampleMeta } from '../../../../components/domain/index.js';
+import { Alert, Button } from '../../../../Components/ui/index.js';
+import { DocumentUpload, sampleMeta } from '../../../../Components/domain/index.js';
 import { cn } from '../../../../lib/cn.js';
 
 export function StepDocs({ f, set, show }) {

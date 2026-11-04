@@ -18,7 +18,7 @@ export const emptyReg = () => ({
 export function regFromIns(ins) {
   const p = phoneCountry(ins.phone);
   return {
-    ...emptyReg(), kind: ins.kind, company: ins.company || '', nif: ins.nif || '', rccm: ins.rccm || '', address: ins.address || '',
+    ...emptyReg(), kind: ins.kin   d, company: ins.company || '', nif: ins.nif || '', rccm: ins.rccm || '', address: ins.address || '',
     city: ins.city || '', country: ins.country || 'TG', rep: ins.rep ? { ...ins.rep } : { first: '', last: '', role: '' }, fleet: ins.fleet ? String(ins.fleet) : '',
     first: ins.first || '', last: ins.last || '', idNumber: ins.idNumber || '', email: ins.email || '', phoneCc: p.cc, phone: p.digits,
     docs: { ...ins.docs }, cgu: true, rgpd: true,

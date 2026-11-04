@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import { useNav } from '../lib/navigation.jsx';
 import { usePortFlow, useCurrentUser } from '../providers/PortFlowProvider.jsx';
-import { BootScreen } from '../components/domain/BootScreen.jsx';
+import { BootScreen } from '../Components/domain/BootScreen.jsx';
 import { ForcePasswordChangePage } from '../features/auth/pages/PasswordPages.jsx';
 import { HOME_OF_SPACE } from './routes.js';
 

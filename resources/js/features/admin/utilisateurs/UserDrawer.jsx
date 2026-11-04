@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { ACCOUNT_KINDS, accountName, personName, formatPhone, fmtDateTime } from '../../../lib/domain.js';
 import { confirmAction, notify, showSecret } from '../../../lib/alerts.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, Badge, Avatar, KeyValue, Alert } from '../../../components/ui/index.js';
+import { Drawer, Button, Badge, Avatar, KeyValue, Alert } from '../../../Components/ui/index.js';
 import { useAdminApi } from '../api.js';
 import { profileOfUser } from '../selectors.js';
 import { userForm, userErrors, userPayload } from './userForm.js';

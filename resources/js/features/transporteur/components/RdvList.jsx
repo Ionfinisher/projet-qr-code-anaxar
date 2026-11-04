@@ -1,7 +1,7 @@
 // Liste des rendez-vous : ligne d'un camion (créneau, conteneur, tracteur, chauffeur, statut, contrôles).
 import { TERMINALS, OPS, checkCounts, driverName, relDay, fmtDayLong } from '../../../lib/domain.js';
-import { Icon } from '../../../components/ui/index.js';
-import { ContainerNumber, Plate, RdvStatusBadge, ChecksBar } from '../../../components/domain/index.js';
+import { Icon } from '../../../Components/ui/index.js';
+import { ContainerNumber, Plate, RdvStatusBadge, ChecksBar } from '../../../Components/domain/index.js';
 import { cn } from '../../../lib/cn.js';
 import { cap } from '../selectors.js';
 

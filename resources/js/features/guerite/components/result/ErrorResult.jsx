@@ -1,5 +1,5 @@
-import { Alert, Button, Icon, KeyValue } from '../../../../components/ui/index.js';
-import { Plate, ContainerNumber } from '../../../../components/domain/index.js';
+import { Alert, Button, Icon, KeyValue } from '../../../../Components/ui/index.js';
+import { Plate, ContainerNumber } from '../../../../Components/domain/index.js';
 
 const FRAUD = {
   signature: ['QR code non authentique', 'La signature ne correspond pas au contenu : le QR a été modifié ou fabriqué. Accès refusé. L’incident est inscrit au journal.'],

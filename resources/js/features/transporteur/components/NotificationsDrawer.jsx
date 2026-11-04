@@ -1,8 +1,8 @@
 // Notifications du transporteur : e-mails et SMS reçus, QR envoyés par WhatsApp (lecture → notif.read).
 import { useEffect, useState } from 'react';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, EmptyState } from '../../../components/ui/index.js';
-import { MessageRow } from '../../../components/domain/index.js';
+import { Drawer, Button, EmptyState } from '../../../Components/ui/index.js';
+import { MessageRow } from '../../../Components/domain/index.js';
 import { cn } from '../../../lib/cn.js';
 import { useTransporteurApi } from '../api.js';
 

@@ -1,5 +1,5 @@
 // Pass chauffeur : page publique ouverte depuis le lien WhatsApp ou SMS (mobile d'abord).
-import { Logo } from '../components/domain/Logo.jsx';
+import { Logo } from '../Components/domain/Logo.jsx';
 import { SkipLink, TopBar } from './parts.jsx';
 
 export function PassLayout({ children }) {

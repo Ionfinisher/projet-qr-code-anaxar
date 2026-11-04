@@ -6,8 +6,8 @@ import {
 } from '../../../lib/domain.js';
 import { confirmAction, notify } from '../../../lib/alerts.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Card, SectionTitle, KeyValue, Meter, Badge, Alert, Button, Icon, DataTable } from '../../../components/ui/index.js';
-import { StatusTag, ContainerNumber, Plate, DocumentList, HistoryTimeline, SentMessages } from '../../../components/domain/index.js';
+import { Card, SectionTitle, KeyValue, Meter, Badge, Alert, Button, Icon, DataTable } from '../../../Components/ui/index.js';
+import { StatusTag, ContainerNumber, Plate, DocumentList, HistoryTimeline, SentMessages } from '../../../Components/domain/index.js';
 import { UrgencyBadge, DecisionBar, ReadOnlyNote } from '../components/Parts.jsx';
 import { rejectWithMotif, introHtml, kvHtml, warnHtml } from '../components/dialogs.js';
 import { cap, demandeChecks } from '../selectors.js';

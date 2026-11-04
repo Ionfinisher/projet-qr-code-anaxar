@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
 import { notify } from '../../../lib/alerts.js';
-import { Field, Input, PasswordInput, Button, Alert, Icon } from '../../../components/ui/index.js';
-import { Logo, DemoBanner } from '../../../components/domain/index.js';
+import { Field, Input, PasswordInput, Button, Alert, Icon } from '../../../Components/ui/index.js';
+import { Logo, DemoBanner } from '../../../Components/domain/index.js';
 import { TopBar, Spacer, SkipLink } from '../../../layouts/parts.jsx';
 import { useAuthApi } from '../../auth/api.js';
 import { Clock } from '../components/Clock.jsx';

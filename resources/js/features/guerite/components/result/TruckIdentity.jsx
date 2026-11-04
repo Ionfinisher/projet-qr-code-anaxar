@@ -1,6 +1,6 @@
 import { OPS, TERMINALS, ISO_TYPE, driverName, transporterName, formatPhone, relDay } from '../../../../lib/domain.js';
-import { KeyValue } from '../../../../components/ui/index.js';
-import { Plate, ContainerNumber, RdvStatusBadge } from '../../../../components/domain/index.js';
+import { KeyValue } from '../../../../Components/ui/index.js';
+import { Plate, ContainerNumber, RdvStatusBadge } from '../../../../Components/domain/index.js';
 
 /** Identité du camion : plaque, conteneur, chauffeur et permis à comparer avec les originaux. */
 export function TruckIdentity({ rdv: r, now }) {
