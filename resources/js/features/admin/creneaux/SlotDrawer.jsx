@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { DEM_STATUS, slotUsage, hhmm, fmtDayLong, fmtDateTime, accountName } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, Field, Input, Select, Segmented, Meter, KeyValue, Alert, Icon, fieldProps } from '../../../components/ui/index.js';
-import { StatusTag } from '../../../components/domain/index.js';
+import { Drawer, Button, Field, Input, Select, Segmented, Meter, KeyValue, Alert, Icon, fieldProps } from '../../../Components/ui/index.js';
+import { StatusTag } from '../../../Components/domain/index.js';
 import { useAdminApi } from '../api.js';
 import { cap, ownerOf, plural } from '../selectors.js';
 

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { slotUsage, dayStr, addDays, fmtDayLong, fmtInt } from '../../../lib/domain.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Button, IconButton, EmptyState } from '../../../components/ui/index.js';
+import { PageHeader, Button, IconButton, EmptyState } from '../../../Components/ui/index.js';
 import { RequirePerm } from '../components/Parts.jsx';
 import { mondayOf } from '../selectors.js';
 import { WeekGrid, weekLabel } from './WeekGrid.jsx';

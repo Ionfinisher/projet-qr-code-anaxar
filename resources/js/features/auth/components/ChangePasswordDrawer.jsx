@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { passwordOk } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
-import { Drawer, Field, PasswordInput, PasswordRules, Button, Alert } from '../../../components/ui/index.js';
+import { Drawer, Field, PasswordInput, PasswordRules, Button, Alert } from '../../../Components/ui/index.js';
 import { useAuthApi } from '../api.js';
 
 /** Changer son mot de passe (compte connecté). */

@@ -1,5 +1,5 @@
 import { punctuality, TERMINALS, relDay, fmtTime } from '../../../../lib/domain.js';
-import { Badge, Icon } from '../../../../components/ui/index.js';
+import { Badge, Icon } from '../../../../Components/ui/index.js';
 import { cn } from '../../../../lib/cn.js';
 
 /** Créneau réservé et ponctualité de l'arrivée (tolérance ±15 min). */

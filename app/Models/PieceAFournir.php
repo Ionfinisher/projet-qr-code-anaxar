@@ -13,6 +13,8 @@ class PieceAFournir extends Model
 
     public const TYPE_SOCIETE = 'societe';
 
+    public const TYPE_TRANSITAIRE = 'transitaire';
+
     public const TYPE_PARTICULIER = 'particulier';
 
     public const TYPE_ALL = 'all';

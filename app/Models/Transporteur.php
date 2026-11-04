@@ -27,11 +27,20 @@ class Transporteur extends Model
         'email',
         'raisonsociale',
         'typetransporteur',
+        'nif',
+        'rccm',
+        'fonction_representant',
         'telephone',
         'adresse',
+        'ville',
+        'nombre_camions',
         'statut',
         'created_by',
         'updated_by',
+    ];
+
+    protected $casts = [
+        'nombre_camions' => 'integer',
     ];
 
     public function user()

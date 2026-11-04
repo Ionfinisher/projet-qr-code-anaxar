@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { formatPhone } from '../../../lib/domain.js';
 import { useNav, AppLink } from '../../../lib/navigation.jsx';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { Card, Field, Input, Button, PageHeader, Icon, buttonClass } from '../../../components/ui/index.js';
-import { InscriptionDetail } from '../../../components/domain/index.js';
+import { Card, Field, Input, Button, PageHeader, Icon, buttonClass } from '../../../Components/ui/index.js';
+import { InscriptionDetail } from '../../../Components/domain/index.js';
 import { useAuthApi } from '../api.js';
 
 /** Suivre sa demande d'inscription (référence + contact) : /inscription/suivi?ref=…&contact=… */

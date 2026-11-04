@@ -1,4 +1,4 @@
-import { Icon } from '../../../components/ui/index.js';
+import { Icon } from '../../../Components/ui/index.js';
 import { cn } from '../../../lib/cn.js';
 
 const SIZE = { sm: 'h-7 w-7 text-sm rounded-lg', md: 'h-9 w-9 text-base rounded-xl', lg: 'h-12 w-12 text-xl rounded-2xl' };

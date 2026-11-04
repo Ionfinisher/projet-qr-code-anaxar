@@ -1,4 +1,4 @@
-import { Icon } from '../../../components/ui/index.js';
+import { Icon } from '../../../Components/ui/index.js';
 
 /** Comptes de démonstration (mode démo uniquement) : connexion en un clic. */
 export function DemoAccounts({ accounts, password, disabled, onPick, gateHref }) {

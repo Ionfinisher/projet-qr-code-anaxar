@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { addDays, hhmm, fmtInt } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, Field, Input, Select, Alert, fieldProps } from '../../../components/ui/index.js';
+import { Drawer, Button, Field, Input, Select, Alert, fieldProps } from '../../../Components/ui/index.js';
 import { useAdminApi } from '../api.js';
 import { planSlots, plural } from '../selectors.js';
 import { cn } from '../../../lib/cn.js';

@@ -1,6 +1,6 @@
 // Éléments communs des mises en page : lien d'évitement, barre supérieure, onglets, barre d'onglets mobile.
 import { AppLink } from '../Lib/navigation.jsx';
-import { Icon } from '../components/ui/Icon.jsx';
+import { Icon } from '../Components/ui/Icon.jsx';
 import { cn } from '../Lib/cn.js';
 
 export function SkipLink({ target = 'pf-main' }) {

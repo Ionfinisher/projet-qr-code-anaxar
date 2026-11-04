@@ -4,8 +4,8 @@ import { passwordOk } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { useNav, AppLink } from '../../../lib/navigation.jsx';
 import { useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Card, Field, Input, PasswordInput, PasswordRules, Button, Alert, Icon, buttonClass } from '../../../components/ui/index.js';
-import { Logo } from '../../../components/domain/index.js';
+import { Card, Field, Input, PasswordInput, PasswordRules, Button, Alert, Icon, buttonClass } from '../../../Components/ui/index.js';
+import { Logo } from '../../../Components/domain/index.js';
 import { TopBar, Spacer } from '../../../layouts/parts.jsx';
 import { useAuthApi } from '../api.js';
 

@@ -52,15 +52,22 @@ class RegisteredUserController extends Controller
         ]);
 
         $data = $request->validate([
-            'user_type' => ['required', Rule::in([PieceAFournir::TYPE_SOCIETE, PieceAFournir::TYPE_PARTICULIER])],
+            'user_type' => ['required', Rule::in([PieceAFournir::TYPE_SOCIETE, PieceAFournir::TYPE_TRANSITAIRE, PieceAFournir::TYPE_PARTICULIER])],
             'idpays' => ['required', 'integer', 'exists:pays,id'],
-            'raison_sociale' => ['required_if:user_type,societe', 'nullable', 'string', 'max:255'],
+            'raison_sociale' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
+            'nif' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:100'],
+            'rccm' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:100'],
             'nom' => ['required_if:user_type,particulier', 'nullable', 'string', 'max:255'],
             'prenom' => ['required_if:user_type,particulier', 'nullable', 'string', 'max:255'],
+            'representant_nom' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
+            'representant_prenom' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
+            'fonction_representant' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
             'telephone' => ['required', 'string', 'max:30'],
             'adresse' => ['nullable', 'string', 'max:255'],
+            'ville' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
+            'nombre_camions' => ['nullable', 'integer', 'min:0', 'max:5000'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            'password' => ['required', 'confirmed', Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
         ]);
 
         $pieces = PieceAFournir::query()
@@ -78,12 +85,21 @@ class RegisteredUserController extends Controller
 
             $transporteur = Transporteur::create([
                 'email' => $data['email'],
-                'nom' => $data['nom'] ?? null,
-                'prenom' => $data['prenom'] ?? null,
+                'nom' => $data['user_type'] === PieceAFournir::TYPE_PARTICULIER
+                    ? ($data['nom'] ?? null)
+                    : ($data['representant_nom'] ?? null),
+                'prenom' => $data['user_type'] === PieceAFournir::TYPE_PARTICULIER
+                    ? ($data['prenom'] ?? null)
+                    : ($data['representant_prenom'] ?? null),
                 'raisonsociale' => $data['raison_sociale'] ?? null,
                 'typetransporteur' => $data['user_type'],
+                'nif' => $data['nif'] ?? null,
+                'rccm' => $data['rccm'] ?? null,
+                'fonction_representant' => $data['fonction_representant'] ?? null,
                 'telephone' => $data['telephone'],
                 'adresse' => $data['adresse'] ?? null,
+                'ville' => $data['ville'] ?? null,
+                'nombre_camions' => $data['nombre_camions'] ?? null,
                 'statut' => Transporteur::STATUS_PENDING,
             ]);
 

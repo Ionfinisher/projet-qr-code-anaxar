@@ -64,7 +64,7 @@ class RegistrationEditController extends Controller
         $request->merge(['email' => Str::lower((string) $request->input('email'))]);
         $validated = $request->validate([
             'email' => ['required', 'email'],
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'password' => ['nullable', 'confirmed', Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
             'raison_sociale' => ['nullable', 'string', 'max:255'],
             'nom' => ['nullable', 'string', 'max:255'],
             'prenom' => ['nullable', 'string', 'max:255'],
@@ -142,7 +142,10 @@ class RegistrationEditController extends Controller
             $transporteur->update(['statut' => Inscription::STATUS_PENDING]);
 
             $user = $transporteur->user;
-            $name = $transporteur->typetransporteur === PieceAFournir::TYPE_SOCIETE
+            $name = in_array($transporteur->typetransporteur, [
+                PieceAFournir::TYPE_SOCIETE,
+                PieceAFournir::TYPE_TRANSITAIRE,
+            ], true)
                 ? $transporteur->raisonsociale
                 : trim(($transporteur->prenom ?? '').' '.($transporteur->nom ?? ''));
 

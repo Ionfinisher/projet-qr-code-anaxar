@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { DOC, DOCS, REJECT_REASONS, statusOf, checkCounts, fmtTime, fmtTimeS, fmtDuration } from '../../../lib/domain.js';
 import { notify, chooseReason } from '../../../lib/alerts.js';
-import { Alert, Button, Card, SectionTitle, EmptyState } from '../../../components/ui/index.js';
+import { Alert, Button, Card, SectionTitle, EmptyState } from '../../../Components/ui/index.js';
 import { useGateApi } from '../api.js';
 import { OVERRIDE_REASONS, SOURCE } from '../constants.js';
 import { AuthBanner } from './result/AuthBanner.jsx';

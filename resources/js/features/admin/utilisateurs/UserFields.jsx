@@ -1,4 +1,4 @@
-import { Field, Input, Select, PhoneInput, fieldProps } from '../../../components/ui/index.js';
+import { Field, Input, Select, PhoneInput, fieldProps } from '../../../Components/ui/index.js';
 
 /** Champs d'un utilisateur. internal : compte de l'administration (identité, fonction, profil). */
 export function UserFields({ f, set, e, profiles, internal, actorIsSuper }) {

@@ -6,8 +6,8 @@ import { AppLink } from '../Lib/navigation.jsx';
 import { usePortFlow, useCurrentUser } from '../providers/PortFlowProvider.jsx';
 import { useNow } from '../Hooks/useNow.js';
 import { RequireReady } from '../routes/guards.jsx';
-import { AccountMenu, Drawer, Icon } from '../components/ui/index.js';
-import { Logo, StandardsDrawer } from '../components/domain/index.js';
+import { AccountMenu, Drawer, Icon } from '../Components/ui/index.js';
+import { Logo, StandardsDrawer } from '../Components/domain/index.js';
 import { ForcePasswordChangePage, ChangePasswordDrawer, useAuthApi } from '../features/auth/index.js';
 import {
   GateLoginPage, PostPickerPage, GateSessionProvider, useGateSession, useGateApi, countAtGate, PostGrid, PostBadge, Clock,

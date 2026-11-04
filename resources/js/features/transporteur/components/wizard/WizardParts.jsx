@@ -1,4 +1,4 @@
-import { Icon } from '../../../../components/ui/index.js';
+import { Icon } from '../../../../Components/ui/index.js';
 import { cn } from '../../../../lib/cn.js';
 
 /** Section titrée d'une étape de l'assistant. */

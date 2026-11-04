@@ -1,7 +1,7 @@
 // Tests du service de messagerie : un e-mail et un SMS réels (mode exploitation uniquement).
 import { useState } from 'react';
 import { emailValid, phoneValid, toE164 } from '../../../lib/domain.js';
-import { Card, SectionTitle, Input, PhoneInput, Button } from '../../../components/ui/index.js';
+import { Card, SectionTitle, Input, PhoneInput, Button } from '../../../Components/ui/index.js';
 import { useAdminApi } from '../api.js';
 import { cn } from '../../../lib/cn.js';
 

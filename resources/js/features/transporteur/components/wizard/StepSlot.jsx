@@ -1,6 +1,6 @@
 // Étape 1 : opération, terminal, transporteur mandaté (transitaire) ou transitaire, date et créneau, instructions.
 import { OPS, TERMINALS } from '../../../../lib/domain.js';
-import { Field, Input, Textarea, RadioCards, Segmented, PhoneInput, Icon, fieldProps } from '../../../../components/ui/index.js';
+import { Field, Input, Textarea, RadioCards, Segmented, PhoneInput, Icon, fieldProps } from '../../../../Components/ui/index.js';
 import { SlotPicker } from '../SlotPicker.jsx';
 import { WizardSection } from './WizardParts.jsx';
 

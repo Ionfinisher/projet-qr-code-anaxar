@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { DOCS, fmtSize, fmtDateTime, fmtTime } from '../../../../lib/domain.js';
 import { previews } from '../../../../lib/download.js';
 import { useApi } from '../../../../providers/PortFlowProvider.jsx';
-import { Button, Icon, buttonClass } from '../../../../components/ui/index.js';
+import { Button, Icon, buttonClass } from '../../../../Components/ui/index.js';
 import { cn } from '../../../../lib/cn.js';
 import { PostBadge } from '../PostBadge.jsx';
 

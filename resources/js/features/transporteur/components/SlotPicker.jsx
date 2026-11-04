@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { dayStr, addDays, slotRange, fmtWeekday, fmtDayNum } from '../../../lib/domain.js';
 import { usePortFlow } from '../../../providers/PortFlowProvider.jsx';
-import { EmptyState, Meter, Icon } from '../../../components/ui/index.js';
+import { EmptyState, Meter, Icon } from '../../../Components/ui/index.js';
 import { cn } from '../../../lib/cn.js';
 import { slotUsageFor, mineOnSlot } from '../selectors.js';
 

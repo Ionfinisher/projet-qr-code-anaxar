@@ -1,5 +1,5 @@
 import { fmtDayLong } from '../../../../lib/domain.js';
-import { Button, Icon } from '../../../../components/ui/index.js';
+import { Button, Icon } from '../../../../Components/ui/index.js';
 import { cn } from '../../../../lib/cn.js';
 import { cap } from '../../selectors.js';
 

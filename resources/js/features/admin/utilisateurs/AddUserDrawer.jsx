@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { genPassword, personName } from '../../../lib/domain.js';
 import { notify } from '../../../lib/alerts.js';
 import { usePortFlow, useCurrentUser } from '../../../providers/PortFlowProvider.jsx';
-import { Drawer, Button, Alert } from '../../../components/ui/index.js';
+import { Drawer, Button, Alert } from '../../../Components/ui/index.js';
 import { useAdminApi } from '../api.js';
 import { userForm, userErrors, userPayload } from './userForm.js';
 import { UserFields } from './UserFields.jsx';

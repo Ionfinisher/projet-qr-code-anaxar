@@ -1,9 +1,9 @@
-// Étapes de l'assistant d'inscription : identité, contact et accès, pièces, vérification.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    // Étapes de l'assistant d'inscription : identité, contact et accès, pièces, vérification.
 import { ACCOUNT_KINDS, INS_DOCS, COUNTRIES, COUNTRY, formatPhone, toE164 } from '../../../../lib/domain.js';
 import {
   Field, Input, Select, RadioCards, PhoneInput, PasswordInput, PasswordRules, Checkbox, KeyValue, Alert, Badge, Button, Icon, fieldProps,
-} from '../../../../components/ui/index.js';
-import { DocumentUpload } from '../../../../components/domain/index.js';
+} from '../../../../Components/ui/index.js';
+import { DocumentUpload } from '../../../../Components/domain/index.js';
 import { cn } from '../../../../lib/cn.js';
 
 export function FormSection({ icon, title, children, className }) {

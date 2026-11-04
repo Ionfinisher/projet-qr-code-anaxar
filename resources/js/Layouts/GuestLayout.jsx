@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import FlashAlerts from '@/Components/FlashAlerts';
 import { LOCODE } from '../Lib/domain.js';
-import { LogoMark } from '../components/domain/Logo.jsx';
-import { Icon } from '../components/ui/Icon.jsx';
+import { LogoMark } from '../Components/domain/Logo.jsx';
+import { Icon } from '../Components/ui/Icon.jsx';
 import { SkipLink } from './parts.jsx';
 
 /** Piles de conteneurs : la signature visuelle du port. */

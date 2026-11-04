@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { dayStr, statusOf, checkCounts, relDay, fmtDayLong, transporterName, driverName } from '../../../lib/domain.js';
 import { useNow } from '../../../hooks/useNow.js';
-import { PageHeader, Segmented, DataTable, EmptyState, Button } from '../../../components/ui/index.js';
-import { Plate, ContainerNumber, RdvStatusBadge, ChecksBar } from '../../../components/domain/index.js';
+import { PageHeader, Segmented, DataTable, EmptyState, Button } from '../../../Components/ui/index.js';
+import { Plate, ContainerNumber, RdvStatusBadge, ChecksBar } from '../../../Components/domain/index.js';
 import { useGateSession } from '../GateSession.jsx';
 import { ARR_FILTERS, cap } from '../constants.js';
 import { gateArrivals } from '../selectors.js';

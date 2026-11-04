@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { copyText } from '../../../lib/download.js';
-import { Field, Input, Button, fieldProps } from '../../../components/ui/index.js';
+import { Field, Input, Button, fieldProps } from '../../../Components/ui/index.js';
 
 /** Mot de passe provisoire en lecture seule, avec bouton Copier (ou une autre action). */
 export function SecretField({ id, label, hint, value, action }) {
