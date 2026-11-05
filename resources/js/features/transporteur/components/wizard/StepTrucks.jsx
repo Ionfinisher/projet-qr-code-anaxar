@@ -1,10 +1,10 @@
 // Étape 2 : camion(s) — chauffeur (téléphone, permis), véhicule (plaques ISO 3166-1), conteneur ISO 6346, BL, marchandise, VGM.
 import { useMemo, useState } from 'react';
-import { COUNTRIES, ISO_TYPES, ISO_TYPE, parseContainer, parseBL, normalizePlate, licenseValid } from '../../../../lib/domain.js';
-import { notify } from '../../../../lib/alerts.js';
-import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, Icon, fieldProps } from '../../../../Components/ui/index.js';
-import { ContainerNumber, Plate } from '../../../../Components/domain/index.js';
-import { cn } from '../../../../lib/cn.js';
+import { COUNTRIES, ISO_TYPES, ISO_TYPE, parseContainer, parseBL, normalizePlate, licenseValid } from '@/Lib/domain';
+import { notify } from '@/Lib/alerts';
+import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, Icon, fieldProps } from '@/Components/ui';
+import { ContainerNumber, Plate } from '@/Components/domain';
+import { cn } from '@/Lib/cn';
 import { newTruck, parsePastedTrucks } from '../../demandeForm.js';
 import { TruckNo, SubTitle } from './WizardParts.jsx';
 

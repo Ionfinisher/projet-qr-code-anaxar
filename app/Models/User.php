@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\HasGeneratedKey;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -82,6 +83,20 @@ class User extends Authenticatable implements MustVerifyEmail
     public function pays()
     {
         return $this->belongsTo(Pays::class, 'idpays');
+    }
+
+    public function demandesRdv(): HasMany
+    {
+        return $this->hasMany(DemandeRdv::class);
+    }
+
+    public function isTransporteur(): bool
+    {
+        return ! $this->isAdmin() && in_array($this->user_type, [
+            PieceAFournir::TYPE_SOCIETE,
+            PieceAFournir::TYPE_TRANSITAIRE,
+            PieceAFournir::TYPE_PARTICULIER,
+        ], true);
     }
 
     public function isApproved(): bool

@@ -1,8 +1,8 @@
 // Fournisseur PortFlow : client d'API, configuration publique, session (jeton CSRF) et données de l'écran.
 // Une instance par application : <PortFlowProvider app="plateforme"> ou <PortFlowProvider app="guerite">.
 import { createContext, useContext, useEffect, useMemo, useState, useSyncExternalStore, useCallback } from 'react';
-import { createApiClient } from '../lib/http.js';
-import { setVerifyKey, hasPerm, profileSpace } from '../lib/domain.js';
+import { createApiClient } from '@/Lib/http';
+import { setVerifyKey, hasPerm, profileSpace } from '@/Lib/domain';
 import { getPortFlowConfig } from '../config.js';
 
 export const EMPTY_STATE = {

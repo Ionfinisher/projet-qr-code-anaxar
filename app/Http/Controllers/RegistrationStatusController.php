@@ -8,6 +8,7 @@ use App\Notifications\RegistrationPending;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -24,6 +25,7 @@ class RegistrationStatusController extends Controller
         return Inertia::render('Registration/Status', [
             'lookup' => [
                 'email' => (string) $request->query('email', ''),
+                'contact' => (string) $request->query('contact', $request->query('email', '')),
                 'numero_dossier' => (string) $request->query('numero_dossier', ''),
             ],
         ]);
@@ -31,40 +33,94 @@ class RegistrationStatusController extends Controller
 
     public function show(Request $request): Response
     {
+        $contact = trim((string) ($request->input('contact') ?: $request->input('email')));
         $request->merge([
-            'email' => Str::lower(trim((string) $request->input('email'))),
+            'contact' => $contact,
+            'email' => Str::lower($contact),
             'numero_dossier' => Str::upper((string) preg_replace('/\s+/u', '', (string) $request->input('numero_dossier'))),
         ]);
 
         $validated = $request->validate([
-            'email' => ['required', 'email'],
+            'contact' => ['required', 'string', 'max:255'],
             'numero_dossier' => ['required', 'string', 'max:50'],
         ]);
 
         $inscription = Inscription::query()
-            ->with(['latestRejection'])
-            ->where('email', $validated['email'])
+            ->with(['transporteur', 'pieceinscriptions.pieceafournir', 'rejetinscriptions'])
+            ->where(function ($query) use ($validated) {
+                $query->where('email', Str::lower($validated['contact']))
+                    ->orWhereHas('transporteur', function ($transporteur) use ($validated) {
+                        $transporteur->where('telephone', $validated['contact']);
+                    });
+            })
             ->where('numero_dossier', $validated['numero_dossier'])
             ->first();
 
         return Inertia::render('Registration/Status', [
-            'lookup' => $validated,
-            'registration' => $inscription ? [
-                'numero_dossier' => $inscription->numero_dossier,
-                'status' => $inscription->statut,
-                'status_label' => self::STATUS_LABELS[$inscription->statut] ?? $inscription->statut,
-                'rejection_reason' => $inscription->statut === Inscription::STATUS_REJECTED
-                    ? $inscription->latestRejection?->raison
-                    : null,
-                'can_edit' => $inscription->statut === Inscription::STATUS_REJECTED,
-                'edit_url' => $inscription->statut === Inscription::STATUS_REJECTED
-                    ? route('registration.edit', [
-                        'numeroDossier' => $inscription->numero_dossier,
-                        'email' => $inscription->email,
-                    ])
-                    : null,
-            ] : null,
+            'lookup' => ['email' => $validated['contact'], 'contact' => $validated['contact'], 'numero_dossier' => $validated['numero_dossier']],
+            'registration' => $inscription ? $this->present($inscription) : null,
         ]);
+    }
+
+    private function present(Inscription $inscription): array
+    {
+        $transporteur = $inscription->transporteur;
+        $type = match ($transporteur?->typetransporteur) {
+            'societe' => 'Entreprise de transport',
+            'transitaire' => 'Commissionnaire en douane / transitaire',
+            default => 'Particulier',
+        };
+        $documents = $inscription->pieceinscriptions->mapWithKeys(function ($piece) {
+            $meta = [
+                'name' => basename($piece->piece),
+                'size' => Storage::disk('local')->exists($piece->piece) ? Storage::disk('local')->size($piece->piece) : 0,
+                'status' => $piece->statut,
+            ];
+            if (Storage::disk('local')->exists($piece->piece)) {
+                $meta['sha256'] = hash_file('sha256', Storage::disk('local')->path($piece->piece));
+            }
+
+            return [$piece->pieceafournir?->id ?? $piece->id => [
+                'label' => $piece->pieceafournir?->libelle ?? 'Pièce justificative',
+                ...$meta,
+            ]];
+        })->all();
+
+        $history = [[
+            'at' => $inscription->created_at?->toISOString(),
+            'title' => 'Demande soumise',
+            'description' => $transporteur?->raisonsociale ?: trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? '')),
+        ]];
+        foreach ($inscription->rejetinscriptions->sortBy('created_at') as $rejection) {
+            $history[] = [
+                'at' => $rejection->created_at?->toISOString(),
+                'title' => 'Compléments demandés',
+                'description' => $rejection->raison,
+            ];
+        }
+
+        return [
+            'numero_dossier' => $inscription->numero_dossier,
+            'status' => $inscription->statut,
+            'status_label' => self::STATUS_LABELS[$inscription->statut] ?? $inscription->statut,
+            'email' => $inscription->email,
+            'phone' => $transporteur?->telephone,
+            'submitted_at' => $inscription->created_at?->toISOString(),
+            'rejection_reason' => $inscription->statut === Inscription::STATUS_REJECTED ? $inscription->rejetinscriptions->last()?->raison : null,
+            'can_edit' => $inscription->statut === Inscription::STATUS_REJECTED,
+            'edit_url' => $inscription->statut === Inscription::STATUS_REJECTED ? route('registration.edit', ['numeroDossier' => $inscription->numero_dossier, 'email' => $inscription->email]) : null,
+            'identity' => [
+                ['label' => 'Type de compte', 'value' => $type],
+                ['label' => $transporteur?->typetransporteur === 'particulier' ? 'Nom' : 'Raison sociale', 'value' => $transporteur?->raisonsociale ?: trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? ''))],
+                ['label' => 'NIF', 'value' => $transporteur?->nif],
+                ['label' => 'RCCM', 'value' => $transporteur?->rccm],
+                ['label' => 'Adresse', 'value' => collect([$transporteur?->adresse, $transporteur?->ville])->filter()->join(', ')],
+                ['label' => 'Représentant légal', 'value' => trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? '').($transporteur?->fonction_representant ? ' · '.$transporteur->fonction_representant : ''))],
+                ['label' => 'Camions', 'value' => $transporteur?->nombre_camions],
+            ],
+            'documents' => $documents,
+            'history' => $history,
+        ];
     }
 
     public function verify(Request $request, int $id, string $hash): RedirectResponse

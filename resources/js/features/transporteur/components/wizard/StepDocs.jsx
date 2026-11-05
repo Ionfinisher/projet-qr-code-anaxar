@@ -1,11 +1,11 @@
 // Étape 3 : les 6 documents obligatoires (empreinte SHA-256 inscrite dans le QR signé).
 import { useState } from 'react';
-import { DOCS } from '../../../../lib/domain.js';
-import { notify } from '../../../../lib/alerts.js';
+import { DOCS } from '@/Lib/domain';
+import { notify } from '@/Lib/alerts';
 import { useApi, useServerConfig } from '../../../../providers/PortFlowProvider.jsx';
 import { Alert, Button } from '../../../../Components/ui/index.js';
 import { DocumentUpload, sampleMeta } from '../../../../Components/domain/index.js';
-import { cn } from '../../../../lib/cn.js';
+import { cn } from '@/Lib/cn';
 
 export function StepDocs({ f, set, show }) {
   const api = useApi();

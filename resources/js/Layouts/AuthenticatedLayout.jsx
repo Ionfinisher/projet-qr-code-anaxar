@@ -24,6 +24,11 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
         ? (user?.raisonsociale || 'Société')
         : 'Transporteur';
 
+    const approved = !user?.statut || ['approved', 'active'].includes(user.statut);
+    const isTransporteur = !user?.is_admin
+        && approved
+        && ['societe', 'transitaire', 'particulier'].includes(user?.user_type);
+
     const navigation = [
         {
             key: 'dashboard',
@@ -32,6 +37,30 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             active: isCurrent('dashboard'),
             icon: 'layout-dashboard',
             visible: true,
+        },
+        {
+            key: 'transporteur-creneaux',
+            label: 'Créneaux',
+            href: routeExists('transporteur.creneaux.index') ? route('transporteur.creneaux.index') : '#',
+            active: isCurrent('transporteur.creneaux.*'),
+            icon: 'calendar-days',
+            visible: isTransporteur && routeExists('transporteur.creneaux.index'),
+        },
+        {
+            key: 'transporteur-demandes',
+            label: 'Mes demandes',
+            href: routeExists('transporteur.demandes.index') ? route('transporteur.demandes.index') : '#',
+            active: isCurrent('transporteur.demandes.index') || isCurrent('transporteur.demandes.sent') || isCurrent('transporteur.demandes.edit'),
+            icon: 'file-text',
+            visible: isTransporteur && routeExists('transporteur.demandes.index'),
+        },
+        {
+            key: 'transporteur-new',
+            label: 'Nouvelle demande',
+            href: routeExists('transporteur.demandes.create') ? route('transporteur.demandes.create') : '#',
+            active: isCurrent('transporteur.demandes.create'),
+            icon: 'calendar-plus',
+            visible: isTransporteur && routeExists('transporteur.demandes.create'),
         },
         {
             key: 'registrations',

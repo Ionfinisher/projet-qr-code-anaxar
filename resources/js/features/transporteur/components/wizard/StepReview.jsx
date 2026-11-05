@@ -1,5 +1,5 @@
 // Étape 4 : récapitulatif (demandeur, créneau, camions, documents) et déclaration sur l'honneur.
-import { DOCS, OPS, TERMINALS, ACCOUNT_KINDS, slotRange, fmtDayLong, formatPhone, parseContainer, parseBL, accountName } from '../../../../lib/domain.js';
+import { DOCS, OPS, TERMINALS, ACCOUNT_KINDS, slotRange, fmtDayLong, formatPhone, parseContainer, parseBL, accountName } from '@/Lib/domain';
 import { Badge, Button, Checkbox, KeyValue, Icon } from '../../../../Components/ui/index.js';
 import { ContainerNumber, Plate } from '../../../../Components/domain/index.js';
 import { cap } from '../../selectors.js';
