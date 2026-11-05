@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
 use App\Http\Controllers\Admin\CreneauController;
+use App\Http\Controllers\Admin\DemandeRdvController as AdminDemandeRdvController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\ProfileController;
@@ -9,6 +10,10 @@ use App\Http\Controllers\PermissionController;
 use App\Http\Controllers\ProfileRoleController;
 use App\Http\Controllers\RegistrationEditController;
 use App\Http\Controllers\RegistrationStatusController;
+use App\Http\Controllers\Transporteur\CreneauDisponibleController;
+use App\Http\Controllers\Transporteur\DemandeDocumentController;
+use App\Http\Controllers\Transporteur\DemandeRdvController;
+use App\Http\Controllers\Transporteur\TemporaryUploadController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -55,7 +60,34 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/creneaux/batch', [CreneauController::class, 'batchStore'])->name('creneaux.batch');
     Route::put('/creneaux/{creneau}', [CreneauController::class, 'update'])->name('creneaux.update');
     Route::delete('/creneaux/{creneau}', [CreneauController::class, 'destroy'])->name('creneaux.destroy');
+
+    Route::post('/demandes/{demande}/approve', [AdminDemandeRdvController::class, 'approve'])->name('demandes.approve');
+    Route::post('/demandes/{demande}/reject', [AdminDemandeRdvController::class, 'reject'])->name('demandes.reject');
 });
+
+Route::middleware(['auth', 'verified', 'transporteur'])
+    ->prefix('transporteur')
+    ->name('transporteur.')
+    ->group(function () {
+        Route::get('/creneaux', [CreneauDisponibleController::class, 'index'])->name('creneaux.index');
+
+        Route::get('/demandes', [DemandeRdvController::class, 'index'])->name('demandes.index');
+        Route::get('/demandes/nouvelle', [DemandeRdvController::class, 'create'])->name('demandes.create');
+        Route::post('/demandes', [DemandeRdvController::class, 'store'])->name('demandes.store');
+        Route::get('/demandes/{demande}/envoyee', [DemandeRdvController::class, 'sent'])->name('demandes.sent');
+        Route::get('/demandes/{demande}/modifier', [DemandeRdvController::class, 'edit'])->name('demandes.edit');
+        Route::put('/demandes/{demande}', [DemandeRdvController::class, 'update'])->name('demandes.update');
+        Route::post('/demandes/{demande}/annuler', [DemandeRdvController::class, 'cancel'])->name('demandes.cancel');
+        Route::get('/demandes/{demande}/documents/{document}/telecharger', [DemandeDocumentController::class, 'download'])
+            ->name('demandes.documents.download');
+
+        Route::post('/uploads', [TemporaryUploadController::class, 'store'])
+            ->middleware('throttle:30,1')
+            ->name('uploads.store');
+        Route::delete('/uploads/{upload}', [TemporaryUploadController::class, 'destroy'])
+            ->middleware('throttle:30,1')
+            ->name('uploads.destroy');
+    });
 
 Route::middleware('auth')->group(function () {
     Route::middleware('verified')->group(function () {

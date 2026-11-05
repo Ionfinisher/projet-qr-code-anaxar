@@ -1,6 +1,6 @@
-import { fmtDayLong } from '../../../../lib/domain.js';
-import { Button, Icon } from '../../../../Components/ui/index.js';
-import { cn } from '../../../../lib/cn.js';
+import { fmtDayLong } from '@/Lib/domain';
+import { Button, Icon } from '@/Components/ui';
+import { cn } from '@/Lib/cn';
 import { cap } from '../../selectors.js';
 
 function ModeCard({ title, text, trucks, onClick }) {

@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\Models\PieceAFournir;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -39,6 +41,22 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    public function transporteur(string $type = PieceAFournir::TYPE_SOCIETE): static
+    {
+        return $this->state(fn () => [
+            'user_type' => $type,
+            'statut' => User::STATUS_APPROVED,
+            'email_verified_at' => now(),
+        ]);
+    }
+
+    public function pending(): static
+    {
+        return $this->state(fn () => [
+            'statut' => User::STATUS_PENDING,
         ]);
     }
 }

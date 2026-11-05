@@ -1,9 +1,9 @@
 // Assistant « Faire / modifier une demande de rendez-vous » : mode, créneau, camions, documents, vérification.
 import { useRef, useState } from 'react';
-import { notify } from '../../../../lib/alerts.js';
+import { notify } from '@/Lib/alerts';
 import { usePortFlow, useCurrentUser } from '../../../../providers/PortFlowProvider.jsx';
 import { Alert, Button, EmptyState, Icon } from '../../../../Components/ui/index.js';
-import { cn } from '../../../../lib/cn.js';
+import { cn } from '@/Lib/cn';
 import { useTransporteurApi } from '../../api.js';
 import { canModifyDemande } from '../../selectors.js';
 import { STEP_DEFS, initialForm, formFromDemande, newTruck, wizardErrors, stepValid, demandePayload } from '../../demandeForm.js';

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Creneau;
+use App\Services\CreneauUsageService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,10 @@ use Inertia\Response;
 
 class CreneauController extends Controller
 {
+    public function __construct(private readonly CreneauUsageService $usage)
+    {
+    }
+
     public function index(Request $request): Response
     {
         $weekParam = $request->query('week');
@@ -24,22 +29,25 @@ class CreneauController extends Controller
             $days[] = $weekStart->copy()->addDays($i)->format('Y-m-d');
         }
 
-        $slots = Creneau::query()
+        $slotModels = Creneau::query()
             ->forWeek($days[0], $days[6])
-            ->get()
-            ->map(fn (Creneau $slot) => [
-                'id' => $slot->id,
-                'code' => $slot->code,
-                'date' => $slot->date->format('Y-m-d'),
-                'start' => $slot->start,
-                'end' => $slot->end,
-                'capacity' => $slot->capacity,
-                'open' => $slot->open,
-                'close_reason' => $slot->close_reason,
-                'used' => 0,
-                'pending' => 0,
-                'approved' => 0,
-            ]);
+            ->get();
+
+        $usage = $this->usage->forCreneaux($slotModels);
+
+        $slots = $slotModels->map(fn (Creneau $slot) => [
+            'id' => $slot->id,
+            'code' => $slot->code,
+            'date' => $slot->date->format('Y-m-d'),
+            'start' => $slot->start,
+            'end' => $slot->end,
+            'capacity' => $slot->capacity,
+            'open' => $slot->open,
+            'close_reason' => $slot->close_reason,
+            'used' => $usage[$slot->id]['used'],
+            'pending' => $usage[$slot->id]['pending'],
+            'approved' => $usage[$slot->id]['approved'],
+        ]);
 
         $totalSlots = $slots->count();
         $openSlots = $slots->where('open', true);
@@ -151,6 +159,15 @@ class CreneauController extends Controller
             'end' => ['nullable', 'string', 'max:5'],
         ]);
 
+        $usage = $this->usage->forCreneau($creneau);
+
+        if ((int) $validated['capacity'] < $usage['used']) {
+            return back()->with(
+                'error',
+                'La capacité ne peut pas être inférieure aux '.$usage['used'].' camions déjà réservés.'
+            );
+        }
+
         $creneau->update([
             'capacity' => $validated['capacity'],
             'open' => $validated['open'],
@@ -164,6 +181,10 @@ class CreneauController extends Controller
 
     public function destroy(Creneau $creneau): RedirectResponse
     {
+        if ($creneau->demandes()->exists()) {
+            return back()->with('error', 'Ce créneau est utilisé par au moins une demande de rendez-vous.');
+        }
+
         $creneau->delete();
 
         return back()->with('success', 'Créneau supprimé.');

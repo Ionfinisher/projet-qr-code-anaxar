@@ -2,7 +2,7 @@
 import {
   DOCS, COUNTRY, parseContainer, parseBL, normalizePlate, plateValid, phoneValid, toE164, phoneCountry,
   dayStr, slotRange, licenseValid, uid,
-} from '../../lib/domain.js';
+} from '@/Lib/domain';
 import { demandeRdvs, slotUsageFor } from './selectors.js';
 
 export const STEP_DEFS = mode => [

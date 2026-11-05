@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Creneau extends Model
 {
@@ -54,6 +56,26 @@ class Creneau extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function demandes(): HasMany
+    {
+        return $this->hasMany(DemandeRdv::class);
+    }
+
+    public function activeDemandes(): HasMany
+    {
+        return $this->hasMany(DemandeRdv::class)->whereIn('status', DemandeRdv::ACTIVE_STATUSES);
+    }
+
+    public function camions(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            DemandeCamion::class,
+            DemandeRdv::class,
+            'creneau_id',
+            'demande_rdv_id'
+        );
     }
 
     public function scopeForWeek(Builder $query, string $from, string $to): Builder

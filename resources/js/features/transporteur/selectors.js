@@ -1,5 +1,5 @@
 // Sélecteurs purs de l'espace transporteur (données reçues du serveur → listes, droits, occupation).
-import { slotRange, slotUsage, statusOf } from '../../lib/domain.js';
+import { slotRange, slotUsage, statusOf } from '@/Lib/domain';
 
 /** Rendez-vous validés (QR émis) de l'utilisateur. */
 export const myRdvs = (data, user) => data.rdvs.filter(r => r.ownerId === user.id && r.validation === 'approved');
