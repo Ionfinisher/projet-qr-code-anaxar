@@ -42,6 +42,14 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             visible: !!user?.is_admin && routeExists('admin.registrations.index'),
         },
         {
+            key: 'creneaux',
+            label: 'Créneaux',
+            href: routeExists('admin.creneaux.index') ? route('admin.creneaux.index') : '#',
+            active: isCurrent('admin.creneaux.*'),
+            icon: 'calendar-days',
+            visible: !!user?.is_admin && routeExists('admin.creneaux.index'),
+        },
+        {
             key: 'users',
             label: 'Utilisateurs',
             href: routeExists('users.index') ? route('users.index') : '#',

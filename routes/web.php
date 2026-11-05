@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
+use App\Http\Controllers\Admin\CreneauController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\ProfileController;
@@ -49,6 +50,11 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::post('/registrations/{inscription}/approve', [AdminRegistrationController::class, 'approve'])->name('registrations.approve');
     Route::post('/registrations/{inscription}/reject', [AdminRegistrationController::class, 'reject'])->name('registrations.reject');
     Route::get('/registration-documents/{piece}/download', [AdminRegistrationController::class, 'download'])->name('registrations.documents.download');
+
+    Route::get('/creneaux', [CreneauController::class, 'index'])->name('creneaux.index');
+    Route::post('/creneaux/batch', [CreneauController::class, 'batchStore'])->name('creneaux.batch');
+    Route::put('/creneaux/{creneau}', [CreneauController::class, 'update'])->name('creneaux.update');
+    Route::delete('/creneaux/{creneau}', [CreneauController::class, 'destroy'])->name('creneaux.destroy');
 });
 
 Route::middleware('auth')->group(function () {
