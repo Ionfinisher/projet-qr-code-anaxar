@@ -85,7 +85,7 @@ export default function Edit({ registration, pieces = [] }) {
                             />
                         </Field>
 
-                        {registration.user_type === 'societe' ? (
+                        {['societe', 'transitaire'].includes(registration.user_type) ? (
                             <Field
                                 id="edit-raison"
                                 label="Raison sociale"

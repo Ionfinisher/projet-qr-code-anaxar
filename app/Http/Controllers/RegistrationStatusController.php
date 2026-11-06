@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Inscription;
+use App\Models\Transitaire;
 use App\Models\User;
 use App\Notifications\RegistrationPending;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,11 +47,14 @@ class RegistrationStatusController extends Controller
         ]);
 
         $inscription = Inscription::query()
-            ->with(['transporteur', 'pieceinscriptions.pieceafournir', 'rejetinscriptions'])
+            ->with(['transporteur', 'transitaire', 'pieceinscriptions.pieceafournir', 'rejetinscriptions'])
             ->where(function ($query) use ($validated) {
                 $query->where('email', Str::lower($validated['contact']))
                     ->orWhereHas('transporteur', function ($transporteur) use ($validated) {
                         $transporteur->where('telephone', $validated['contact']);
+                    })
+                    ->orWhereHas('transitaire', function ($transitaire) use ($validated) {
+                        $transitaire->where('telephone', $validated['contact']);
                     });
             })
             ->where('numero_dossier', $validated['numero_dossier'])
@@ -64,12 +68,15 @@ class RegistrationStatusController extends Controller
 
     private function present(Inscription $inscription): array
     {
-        $transporteur = $inscription->transporteur;
-        $type = match ($transporteur?->typetransporteur) {
-            'societe' => 'Entreprise de transport',
-            'transitaire' => 'Commissionnaire en douane / transitaire',
-            default => 'Particulier',
-        };
+        $entity = $inscription->registrationEntity();
+        $type = $entity instanceof Transitaire
+            ? 'Commissionnaire en douane / transitaire'
+            : match ($entity?->typetransporteur) {
+                'societe' => 'Entreprise de transport',
+                'transitaire' => 'Commissionnaire en douane / transitaire',
+                default => 'Particulier',
+            };
+        $isParticulier = $entity?->typetransporteur === 'particulier';
         $documents = $inscription->pieceinscriptions->mapWithKeys(function ($piece) {
             $meta = [
                 'name' => basename($piece->piece),
@@ -89,7 +96,7 @@ class RegistrationStatusController extends Controller
         $history = [[
             'at' => $inscription->created_at?->toISOString(),
             'title' => 'Demande soumise',
-            'description' => $transporteur?->raisonsociale ?: trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? '')),
+            'description' => $entity?->raisonsociale ?: trim(($entity?->prenom ?? '').' '.($entity?->nom ?? '')),
         ]];
         foreach ($inscription->rejetinscriptions->sortBy('created_at') as $rejection) {
             $history[] = [
@@ -104,19 +111,19 @@ class RegistrationStatusController extends Controller
             'status' => $inscription->statut,
             'status_label' => self::STATUS_LABELS[$inscription->statut] ?? $inscription->statut,
             'email' => $inscription->email,
-            'phone' => $transporteur?->telephone,
+            'phone' => $entity?->telephone,
             'submitted_at' => $inscription->created_at?->toISOString(),
             'rejection_reason' => $inscription->statut === Inscription::STATUS_REJECTED ? $inscription->rejetinscriptions->last()?->raison : null,
             'can_edit' => $inscription->statut === Inscription::STATUS_REJECTED,
             'edit_url' => $inscription->statut === Inscription::STATUS_REJECTED ? route('registration.edit', ['numeroDossier' => $inscription->numero_dossier, 'email' => $inscription->email]) : null,
             'identity' => [
                 ['label' => 'Type de compte', 'value' => $type],
-                ['label' => $transporteur?->typetransporteur === 'particulier' ? 'Nom' : 'Raison sociale', 'value' => $transporteur?->raisonsociale ?: trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? ''))],
-                ['label' => 'NIF', 'value' => $transporteur?->nif],
-                ['label' => 'RCCM', 'value' => $transporteur?->rccm],
-                ['label' => 'Adresse', 'value' => collect([$transporteur?->adresse, $transporteur?->ville])->filter()->join(', ')],
-                ['label' => 'Représentant légal', 'value' => trim(($transporteur?->prenom ?? '').' '.($transporteur?->nom ?? '').($transporteur?->fonction_representant ? ' · '.$transporteur->fonction_representant : ''))],
-                ['label' => 'Camions', 'value' => $transporteur?->nombre_camions],
+                ['label' => $isParticulier ? 'Nom' : 'Raison sociale', 'value' => $entity?->raisonsociale ?: trim(($entity?->prenom ?? '').' '.($entity?->nom ?? ''))],
+                ['label' => 'NIF', 'value' => $entity?->nif],
+                ['label' => 'RCCM', 'value' => $entity?->rccm],
+                ['label' => 'Adresse', 'value' => collect([$entity?->adresse, $entity?->ville])->filter()->join(', ')],
+                ['label' => 'Représentant légal', 'value' => trim(($entity?->prenom ?? '').' '.($entity?->nom ?? '').($entity?->fonction_representant ? ' · '.$entity->fonction_representant : ''))],
+                ['label' => 'Camions', 'value' => $entity?->nombre_camions],
             ],
             'documents' => $documents,
             'history' => $history,

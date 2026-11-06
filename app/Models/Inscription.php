@@ -28,6 +28,7 @@ class Inscription extends Model
         'token',
         'numero_dossier',
         'idtransporteur',
+        'idtransitaire',
         'created_by',
         'updated_by',
     ];
@@ -58,6 +59,20 @@ class Inscription extends Model
     public function transporteur()
     {
         return $this->belongsTo(Transporteur::class, 'idtransporteur');
+    }
+
+    public function transitaire()
+    {
+        return $this->belongsTo(Transitaire::class, 'idtransitaire');
+    }
+
+    /**
+     * Entité métier portée par le dossier : transporteur (société/particulier)
+     * ou transitaire (table dédiée).
+     */
+    public function registrationEntity(): Transporteur|Transitaire|null
+    {
+        return $this->transitaire ?? $this->transporteur;
     }
 
     public function piecesafournir()

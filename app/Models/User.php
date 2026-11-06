@@ -43,6 +43,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'access_token',
         'idpays',
         'idtransporteur',
+        'idtransitaire',
         'statut',
         'created_by',
         'updated_by',
@@ -78,6 +79,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function transporteur()
     {
         return $this->belongsTo(Transporteur::class, 'idtransporteur');
+    }
+
+    public function transitaire()
+    {
+        return $this->belongsTo(Transitaire::class, 'idtransitaire');
     }
 
     public function pays()

@@ -6,6 +6,7 @@ use App\Models\Inscription;
 use App\Models\Pays;
 use App\Models\PieceAFournir;
 use App\Models\PieceInscription;
+use App\Models\Transitaire;
 use App\Models\Transporteur;
 use App\Models\User;
 use App\Notifications\RegistrationApproved;
@@ -103,6 +104,12 @@ class RegistrationWorkflowTest extends TestCase
         $this->assertNotEmpty($pieceInscription->keypieceinscription);
         $this->assertSame($piece->id, $pieceInscription->idpieceafournir);
         Storage::disk('local')->assertExists($pieceInscription->piece);
+
+        $user = User::where('email', 'acme@example.com')->firstOrFail();
+        $this->assertNotNull($user->idtransporteur);
+        $this->assertNull($user->idtransitaire);
+        $this->assertTrue($user->hasRole('transporteur'));
+        $this->assertFalse($user->hasRole('transitaire'));
 
         Notification::assertSentTo(
             User::where('email', 'acme@example.com')->firstOrFail(),
@@ -352,6 +359,159 @@ class RegistrationWorkflowTest extends TestCase
         $response->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Registration/Status')
             ->where('registration.numero_dossier', $registration->numero_dossier));
+    }
+
+    public function test_transitaire_registration_creates_a_dedicated_account_with_role(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+
+        $pays = $this->createPays();
+
+        $response = $this->post('/register', [
+            'user_type' => 'transitaire',
+            'idpays' => $pays->id,
+            'raison_sociale' => 'Lagune Transit SARL',
+            'nif' => 'TG1000123456',
+            'rccm' => 'TG-LOM 2024 B 1234',
+            'representant_nom' => 'BOKO',
+            'representant_prenom' => 'Akossiwa',
+            'fonction_representant' => 'Directrice',
+            'telephone' => '+228 90 00 00 00',
+            'adresse' => 'Boulevard du 13 Janvier',
+            'ville' => 'Lomé',
+            'email' => 'transit@example.com',
+            'password' => 'Password1!Long',
+            'password_confirmation' => 'Password1!Long',
+        ]);
+
+        $response->assertRedirect(route('login'));
+        $response->assertSessionHas('success');
+
+        $user = User::where('email', 'transit@example.com')->firstOrFail();
+        $inscription = Inscription::where('email', 'transit@example.com')->firstOrFail();
+
+        $this->assertNotNull($user->idtransitaire);
+        $this->assertNull($user->idtransporteur);
+        $this->assertSame('Lagune Transit SARL', $user->name);
+        $this->assertTrue($user->hasRole('transitaire'));
+        $this->assertFalse($user->hasRole('transporteur'));
+
+        $this->assertNotNull($inscription->idtransitaire);
+        $this->assertNull($inscription->idtransporteur);
+
+        $this->assertDatabaseHas('transitaire', [
+            'id' => $user->idtransitaire,
+            'raisonsociale' => 'Lagune Transit SARL',
+            'nif' => 'TG1000123456',
+            'statut' => 'pending',
+        ]);
+        $this->assertDatabaseMissing('transporteur', ['email' => 'transit@example.com']);
+
+        Notification::assertSentTo($user, VerifyRegistrationEmail::class);
+    }
+
+    public function test_particulier_registration_assigns_the_transporteur_role(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+
+        $pays = $this->createPays();
+
+        $this->post('/register', [
+            'user_type' => 'particulier',
+            'idpays' => $pays->id,
+            'nom' => 'ATSU',
+            'prenom' => 'Komla',
+            'telephone' => '+228 91 00 00 00',
+            'adresse' => 'Kpalimé',
+            'email' => 'komla@example.com',
+            'password' => 'Password1!Long',
+            'password_confirmation' => 'Password1!Long',
+        ])->assertRedirect(route('login'));
+
+        $user = User::where('email', 'komla@example.com')->firstOrFail();
+
+        $this->assertNotNull($user->idtransporteur);
+        $this->assertNull($user->idtransitaire);
+        $this->assertTrue($user->hasRole('transporteur'));
+        $this->assertFalse($user->hasRole('transitaire'));
+    }
+
+    public function test_admin_can_approve_a_transitaire_registration(): void
+    {
+        Notification::fake();
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $transitaire = Transitaire::create([
+            'email' => 'transit@example.com',
+            'nom' => 'BOKO',
+            'prenom' => 'Akossiwa',
+            'raisonsociale' => 'Lagune Transit SARL',
+            'telephone' => '+228 90 00 00 00',
+            'statut' => Transitaire::STATUS_PENDING,
+        ]);
+
+        $registration = Inscription::create([
+            'email' => 'transit@example.com',
+            'statut' => Inscription::STATUS_PENDING,
+            'token' => 'token',
+            'idtransitaire' => $transitaire->id,
+        ]);
+
+        $user = User::create([
+            'name' => 'Lagune Transit SARL',
+            'email' => 'transit@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_PENDING,
+            'idtransitaire' => $transitaire->id,
+        ]);
+        $user->assignRole(Role::findOrCreate('transitaire', 'web'));
+
+        $this->actingAs($admin)
+            ->post(route('admin.registrations.approve', $registration))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(Inscription::STATUS_APPROVED, $registration->fresh()->statut);
+        $this->assertSame(Transitaire::STATUS_APPROVED, $transitaire->fresh()->statut);
+        $this->assertSame(User::STATUS_APPROVED, $user->fresh()->statut);
+        Notification::assertSentTo($user, RegistrationApproved::class);
+    }
+
+    public function test_transitaire_registration_status_can_be_found_by_phone(): void
+    {
+        $transitaire = Transitaire::create([
+            'email' => 'transit@example.com',
+            'raisonsociale' => 'Lagune Transit SARL',
+            'telephone' => '+228 90 00 00 00',
+            'statut' => Transitaire::STATUS_PENDING,
+        ]);
+
+        $registration = Inscription::create([
+            'email' => 'transit@example.com',
+            'statut' => Inscription::STATUS_PENDING,
+            'token' => 'token',
+            'idtransitaire' => $transitaire->id,
+        ]);
+
+        $this->get(route('registration.status.search', [
+            'contact' => $transitaire->telephone,
+            'numero_dossier' => $registration->numero_dossier,
+        ]))->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Registration/Status')
+            ->where('registration.numero_dossier', $registration->numero_dossier)
+            ->where('registration.identity.1.value', 'Lagune Transit SARL'));
     }
 
     private function createRejectedRegistration(): Inscription

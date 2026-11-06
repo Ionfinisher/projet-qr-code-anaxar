@@ -26,7 +26,7 @@ export default function Show({ auth, registration }) {
     const rejectForm = useForm({ raison: '' });
     const [confirmApprove, setConfirmApprove] = useState(false);
 
-    const transporteur = registration.transporteur;
+    const transporteur = registration.transporteur || registration.transitaire;
     const pieces = registration.pieceinscriptions || [];
     const isPending = registration.statut === 'pending';
 
@@ -111,7 +111,7 @@ export default function Show({ auth, registration }) {
                                 <div>
                                     <dt className="text-xs text-slate-500">Type de transporteur</dt>
                                     <dd className="font-semibold text-slate-900 capitalize">
-                                        {transporteur?.typetransporteur || '—'}
+                                        {transporteur?.typetransporteur || (registration.transitaire ? 'transitaire' : '—')}
                                     </dd>
                                 </div>
                                 <div>
