@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
 use App\Http\Controllers\Admin\CreneauController;
 use App\Http\Controllers\Admin\DemandeRdvController as AdminDemandeRdvController;
+use App\Http\Controllers\Admin\RdvController as AdminRdvController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\ProfileController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\RegistrationStatusController;
 use App\Http\Controllers\Transporteur\CreneauDisponibleController;
 use App\Http\Controllers\Transporteur\DemandeDocumentController;
 use App\Http\Controllers\Transporteur\DemandeRdvController;
+use App\Http\Controllers\Transporteur\RdvController as TransporteurRdvController;
 use App\Http\Controllers\Transporteur\TemporaryUploadController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -61,8 +63,14 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::put('/creneaux/{creneau}', [CreneauController::class, 'update'])->name('creneaux.update');
     Route::delete('/creneaux/{creneau}', [CreneauController::class, 'destroy'])->name('creneaux.destroy');
 
+    Route::get('/demandes', [AdminDemandeRdvController::class, 'index'])->name('demandes.index');
+    Route::get('/demandes/{demande}', [AdminDemandeRdvController::class, 'show'])->name('demandes.show');
     Route::post('/demandes/{demande}/approve', [AdminDemandeRdvController::class, 'approve'])->name('demandes.approve');
     Route::post('/demandes/{demande}/reject', [AdminDemandeRdvController::class, 'reject'])->name('demandes.reject');
+    Route::get('/demandes/{demande}/documents/{document}/telecharger', [AdminDemandeRdvController::class, 'downloadDocument'])
+        ->name('demandes.documents.download');
+
+    Route::get('/rendez-vous', [AdminRdvController::class, 'index'])->name('rdv.index');
 });
 
 Route::middleware(['auth', 'verified', 'transporteur'])
@@ -71,6 +79,7 @@ Route::middleware(['auth', 'verified', 'transporteur'])
     ->group(function () {
         Route::get('/creneaux', [CreneauDisponibleController::class, 'index'])->name('creneaux.index');
 
+        Route::get('/rendez-vous', [TransporteurRdvController::class, 'index'])->name('rdv.index');
         Route::get('/demandes', [DemandeRdvController::class, 'index'])->name('demandes.index');
         Route::get('/demandes/nouvelle', [DemandeRdvController::class, 'create'])->name('demandes.create');
         Route::post('/demandes', [DemandeRdvController::class, 'store'])->name('demandes.store');

@@ -175,4 +175,115 @@ class AdminDemandeRdvTest extends TestCase
             ->where('stats.total_used', 1)
         );
     }
+
+    public function test_guest_cannot_access_admin_demandes(): void
+    {
+        $this->get(route('admin.demandes.index'))
+            ->assertRedirect(route('login'));
+    }
+
+    public function test_non_admin_cannot_access_admin_demandes(): void
+    {
+        $user = $this->transporteur();
+
+        $this->actingAs($user)
+            ->get(route('admin.demandes.index'))
+            ->assertForbidden();
+    }
+
+    public function test_admin_can_view_demandes_index(): void
+    {
+        $admin = $this->admin();
+        $user = $this->transporteur();
+        $slot = $this->slot();
+        $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
+        DemandeCamion::factory()->forDemande($demande, 1)->create();
+
+        $response = $this->actingAs($admin)->get(route('admin.demandes.index'));
+
+        $response->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Admin/Demandes/Index')
+            ->has('demandes', 1)
+            ->where('demandes.0.reference', $demande->reference)
+            ->has('counts')
+            ->where('counts.en_attente', 1)
+            ->where('counts.all', 1)
+        );
+    }
+
+    public function test_admin_can_filter_demandes_by_status_and_search(): void
+    {
+        $admin = $this->admin();
+        $user = $this->transporteur();
+        $slot = $this->slot();
+
+        $pending = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create(['reference' => 'DR-AAAAAA']);
+        DemandeCamion::factory()->forDemande($pending, 1)->create(['container_number' => 'MSCU1234567']);
+
+        $approved = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create([
+            'reference' => 'DR-BBBBBB',
+            'status' => DemandeRdv::STATUS_APPROVED,
+        ]);
+        DemandeCamion::factory()->forDemande($approved, 1)->create(['container_number' => 'CMAU7654321']);
+
+        // Filter: validee
+        $response = $this->actingAs($admin)->get(route('admin.demandes.index', ['status' => 'validee']));
+        $response->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Admin/Demandes/Index')
+            ->has('demandes', 1)
+            ->where('demandes.0.reference', 'DR-BBBBBB')
+        );
+
+        // Search by container number
+        $searchResponse = $this->actingAs($admin)->get(route('admin.demandes.index', ['status' => 'all', 'q' => 'MSCU1234567']));
+        $searchResponse->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Admin/Demandes/Index')
+            ->has('demandes', 1)
+            ->where('demandes.0.reference', 'DR-AAAAAA')
+        );
+    }
+
+    public function test_admin_can_view_specific_demande_in_drawer(): void
+    {
+        $admin = $this->admin();
+        $user = $this->transporteur();
+        $slot = $this->slot();
+        $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
+        DemandeCamion::factory()->forDemande($demande, 1)->create();
+
+        $response = $this->actingAs($admin)->get(route('admin.demandes.index', ['id' => $demande->reference]));
+
+        $response->assertOk()->assertInertia(fn ($page) => $page
+            ->component('Admin/Demandes/Index')
+            ->where('selected.reference', $demande->reference)
+        );
+    }
+
+    public function test_admin_can_download_demande_document(): void
+    {
+        \Illuminate\Support\Facades\Storage::fake('local');
+
+        $admin = $this->admin();
+        $user = $this->transporteur();
+        $slot = $this->slot();
+        $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
+
+        $path = 'demandes/test.pdf';
+        \Illuminate\Support\Facades\Storage::disk('local')->put($path, 'test content');
+
+        $document = \App\Models\DemandeDocument::create([
+            'demande_rdv_id' => $demande->id,
+            'user_id' => $user->id,
+            'type' => 'bc',
+            'original_name' => 'bon_commande.pdf',
+            'path' => $path,
+            'mime' => 'application/pdf',
+            'size' => 12,
+            'sha256' => hash('sha256', 'test content'),
+        ]);
+
+        $response = $this->actingAs($admin)->get(route('admin.demandes.documents.download', [$demande, $document]));
+
+        $response->assertOk();
+    }
 }

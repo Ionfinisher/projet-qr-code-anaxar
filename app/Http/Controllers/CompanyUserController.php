@@ -43,6 +43,14 @@ class CompanyUserController extends Controller
     {
         $this->authorizeCompany($request);
         $creator = $request->user();
+
+        if ($request->filled('role_id') && ! $request->filled('role_name')) {
+            $role = DB::table('roles')->where('id', $request->input('role_id'))->first();
+            if ($role) {
+                $request->merge(['role_name' => $role->name]);
+            }
+        }
+
         $data = $request->validate([
             'nom' => ['required', 'string', 'max:255'],
             'prenom' => ['required', 'string', 'max:255'],

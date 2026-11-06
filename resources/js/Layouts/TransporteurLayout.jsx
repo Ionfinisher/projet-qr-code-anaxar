@@ -12,6 +12,7 @@ function InertiaTransporteurLayout({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const userName = user?.name || `${user?.prenom ?? ''} ${user?.nom ?? ''}`.trim() || 'Transporteur';
   const tabs = [
+    { href: route('transporteur.rdv.index'), label: 'Rendez-vous', icon: 'calendar-check' },
     { href: route('transporteur.demandes.index'), label: 'Demandes', icon: 'list-todo' },
     { href: route('transporteur.creneaux.index'), label: 'Créneaux', icon: 'calendar-days' },
   ];

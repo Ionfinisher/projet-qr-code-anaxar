@@ -12,11 +12,11 @@ class EnsureTransporteur
     {
         $user = $request->user();
 
-        if (! $user || ! $user->isTransporteur()) {
+        if (! $user || (! $user->isTransporteur() && ! $user->isAdmin())) {
             abort(403, 'Espace réservé aux transporteurs.');
         }
 
-        if (! $user->isApproved()) {
+        if (! $user->isAdmin() && ! $user->isApproved()) {
             abort(403, 'Votre compte doit être approuvé pour accéder à cet espace.');
         }
 
