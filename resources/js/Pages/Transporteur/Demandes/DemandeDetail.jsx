@@ -101,6 +101,17 @@ export default function DemandeDetail({ demande, actions = null }) {
                     <p className="mt-1 text-xs text-slate-500">
                         Décision de {demande.decision.by || 'l’administration'} le {fmtDateTime(demande.decision.at)}
                     </p>
+                    {demande.status === 'validee' && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                            <Button
+                                size="sm"
+                                icon="qr-code"
+                                onClick={() => router.get(route('transporteur.rdv.index', { q: demande.reference }))}
+                            >
+                                Consulter les rendez-vous & QR ({demande.trucks?.length || 1})
+                            </Button>
+                        </div>
+                    )}
                 </Alert>
             ) : null}
 

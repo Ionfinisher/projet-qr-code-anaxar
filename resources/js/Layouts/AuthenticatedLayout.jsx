@@ -47,6 +47,14 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             visible: isTransporteur && routeExists('transporteur.creneaux.index'),
         },
         {
+            key: 'transporteur-rdv',
+            label: 'Rendez-vous',
+            href: routeExists('transporteur.rdv.index') ? route('transporteur.rdv.index') : '#',
+            active: isCurrent('transporteur.rdv.*'),
+            icon: 'calendar-check',
+            visible: isTransporteur && routeExists('transporteur.rdv.index'),
+        },
+        {
             key: 'transporteur-demandes',
             label: 'Mes demandes',
             href: routeExists('transporteur.demandes.index') ? route('transporteur.demandes.index') : '#',
@@ -69,6 +77,22 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             active: isCurrent('admin.registrations.*'),
             icon: 'user-check',
             visible: !!user?.is_admin && routeExists('admin.registrations.index'),
+        },
+        {
+            key: 'admin-demandes',
+            label: 'Demandes de RDV',
+            href: routeExists('admin.demandes.index') ? route('admin.demandes.index') : '#',
+            active: isCurrent('admin.demandes.*'),
+            icon: 'calendar-clock',
+            visible: !!user?.is_admin && routeExists('admin.demandes.index'),
+        },
+        {
+            key: 'admin-rdv',
+            label: 'Rendez-vous',
+            href: routeExists('admin.rdv.index') ? route('admin.rdv.index') : '#',
+            active: isCurrent('admin.rdv.*'),
+            icon: 'calendar-check',
+            visible: !!user?.is_admin && routeExists('admin.rdv.index'),
         },
         {
             key: 'creneaux',
