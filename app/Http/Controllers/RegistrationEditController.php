@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Inscription;
 use App\Models\PieceAFournir;
 use App\Models\PieceInscription;
+use App\Models\Transitaire;
 use App\Notifications\RegistrationPending;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -22,8 +23,10 @@ class RegistrationEditController extends Controller
         $request->merge(['email' => Str::lower((string) $request->input('email'))]);
         $validated = $request->validate(['email' => ['required', 'email']]);
         $inscription = $this->findRejected($validated['email'], $numeroDossier);
-        $transporteur = $inscription->transporteur;
-        $type = $transporteur?->typetransporteur ?? PieceAFournir::TYPE_PARTICULIER;
+        $entity = $inscription->registrationEntity();
+        $type = $entity instanceof Transitaire
+            ? PieceAFournir::TYPE_TRANSITAIRE
+            : ($entity?->typetransporteur ?? PieceAFournir::TYPE_PARTICULIER);
 
         $pieces = PieceAFournir::query()
             ->active()
@@ -40,11 +43,11 @@ class RegistrationEditController extends Controller
                 'numero_dossier' => $inscription->numero_dossier,
                 'email' => $inscription->email,
                 'user_type' => $type,
-                'nom' => $transporteur?->nom,
-                'prenom' => $transporteur?->prenom,
-                'raisonsociale' => $transporteur?->raisonsociale,
-                'telephone' => $transporteur?->telephone,
-                'adresse' => $transporteur?->adresse,
+                'nom' => $entity?->nom,
+                'prenom' => $entity?->prenom,
+                'raisonsociale' => $entity?->raisonsociale,
+                'telephone' => $entity?->telephone,
+                'adresse' => $entity?->adresse,
                 'rejection_reason' => $inscription->latestRejection?->raison,
             ],
             'pieces' => $pieces->map(fn (PieceAFournir $piece) => [
@@ -73,12 +76,16 @@ class RegistrationEditController extends Controller
         ]);
 
         $inscription = $this->findRejected($validated['email'], $numeroDossier);
-        $transporteur = $inscription->transporteur;
-        abort_if($transporteur === null, 404);
+        $entity = $inscription->registrationEntity();
+        abort_if($entity === null, 404);
+
+        $type = $entity instanceof Transitaire
+            ? PieceAFournir::TYPE_TRANSITAIRE
+            : ($entity->typetransporteur ?? PieceAFournir::TYPE_PARTICULIER);
 
         $pieces = PieceAFournir::query()
             ->active()
-            ->pourType($transporteur->typetransporteur ?? PieceAFournir::TYPE_PARTICULIER)
+            ->pourType($type)
             ->orderBy('libelle')
             ->get();
 
@@ -97,8 +104,8 @@ class RegistrationEditController extends Controller
         }
         $request->validate($rules);
 
-        DB::transaction(function () use ($request, $inscription, $transporteur, $pieces, $existing) {
-            $transporteur->update([
+        DB::transaction(function () use ($request, $inscription, $entity, $type, $pieces, $existing) {
+            $entity->update([
                 'nom' => $request->input('nom'),
                 'prenom' => $request->input('prenom'),
                 'raisonsociale' => $request->input('raison_sociale'),
@@ -139,22 +146,22 @@ class RegistrationEditController extends Controller
                 ->where('statut', 'active')
                 ->update(['statut' => 'inactive']);
 
-            $transporteur->update(['statut' => Inscription::STATUS_PENDING]);
+            $entity->update(['statut' => Inscription::STATUS_PENDING]);
 
-            $user = $transporteur->user;
-            $name = in_array($transporteur->typetransporteur, [
+            $user = $entity->user;
+            $name = in_array($type, [
                 PieceAFournir::TYPE_SOCIETE,
                 PieceAFournir::TYPE_TRANSITAIRE,
             ], true)
-                ? $transporteur->raisonsociale
-                : trim(($transporteur->prenom ?? '').' '.($transporteur->nom ?? ''));
+                ? $entity->raisonsociale
+                : trim(($entity->prenom ?? '').' '.($entity->nom ?? ''));
 
             $userData = [
-                'name' => $name ?: $transporteur->email,
-                'nom' => $transporteur->nom,
-                'prenom' => $transporteur->prenom,
-                'telephone' => $transporteur->telephone,
-                'adresse' => $transporteur->adresse,
+                'name' => $name ?: $entity->email,
+                'nom' => $entity->nom,
+                'prenom' => $entity->prenom,
+                'telephone' => $entity->telephone,
+                'adresse' => $entity->adresse,
                 'statut' => Inscription::STATUS_PENDING,
             ];
 
@@ -174,7 +181,7 @@ class RegistrationEditController extends Controller
 
     private function findRejected(string $email, string $numeroDossier): Inscription
     {
-        return Inscription::with(['transporteur', 'latestRejection'])
+        return Inscription::with(['transporteur', 'transitaire', 'latestRejection'])
             ->where('email', $email)
             ->where('numero_dossier', $numeroDossier)
             ->where('statut', Inscription::STATUS_REJECTED)

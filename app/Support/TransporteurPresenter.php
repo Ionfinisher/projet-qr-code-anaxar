@@ -12,7 +12,7 @@ final class TransporteurPresenter
      */
     public static function me(User $user): array
     {
-        $user->loadMissing('transporteur');
+        $user->loadMissing(['transporteur', 'transitaire']);
 
         $type = $user->user_type;
 
@@ -24,7 +24,7 @@ final class TransporteurPresenter
             'last' => $user->nom,
             'email' => $user->email,
             'phone' => $user->telephone,
-            'company' => $user->transporteur?->raisonsociale,
+            'company' => $user->transporteur?->raisonsociale ?? $user->transitaire?->raisonsociale,
             'type' => $type,
             'acct' => $type === PieceAFournir::TYPE_PARTICULIER
                 ? 'particulier'

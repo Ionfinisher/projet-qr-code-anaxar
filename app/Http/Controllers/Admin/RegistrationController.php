@@ -20,18 +20,22 @@ class RegistrationController extends Controller
     public function index(): Response
     {
         return Inertia::render('Admin/Registrations/Index', [
-            'registrations' => Inscription::with(['transporteur', 'latestRejection'])
+            'registrations' => Inscription::with(['transporteur', 'transitaire', 'latestRejection'])
                 ->latest()
                 ->paginate(20)
-                ->through(fn (Inscription $registration) => [
-                    'id' => $registration->id,
-                    'numero_dossier' => $registration->numero_dossier,
-                    'email' => $registration->email,
-                    'status' => $registration->statut,
-                    'name' => $registration->transporteur?->raisonsociale
-                        ?: trim(($registration->transporteur?->prenom ?? '').' '.($registration->transporteur?->nom ?? '')),
-                    'rejection_reason' => $registration->latestRejection?->raison,
-                ]),
+                ->through(function (Inscription $registration) {
+                    $entity = $registration->registrationEntity();
+
+                    return [
+                        'id' => $registration->id,
+                        'numero_dossier' => $registration->numero_dossier,
+                        'email' => $registration->email,
+                        'status' => $registration->statut,
+                        'name' => $entity?->raisonsociale
+                            ?: trim(($entity?->prenom ?? '').' '.($entity?->nom ?? '')),
+                        'rejection_reason' => $registration->latestRejection?->raison,
+                    ];
+                }),
         ]);
     }
 
@@ -39,6 +43,7 @@ class RegistrationController extends Controller
     {
         $inscription->load([
             'transporteur.user',
+            'transitaire.user',
             'pieceinscriptions.pieceafournir',
             'latestRejection',
         ]);
@@ -55,10 +60,12 @@ class RegistrationController extends Controller
         }
 
         DB::transaction(function () use ($inscription) {
+            $entity = $inscription->registrationEntity();
+
             $inscription->update(['statut' => Inscription::STATUS_APPROVED]);
-            $inscription->transporteur?->update(['statut' => Inscription::STATUS_APPROVED]);
-            $inscription->transporteur?->user?->update(['statut' => Inscription::STATUS_APPROVED]);
-            $inscription->transporteur?->user?->notify(new RegistrationApproved);
+            $entity?->update(['statut' => Inscription::STATUS_APPROVED]);
+            $entity?->user?->update(['statut' => Inscription::STATUS_APPROVED]);
+            $entity?->user?->notify(new RegistrationApproved);
         });
 
         return back()->with('success', 'Dossier validé.');
@@ -69,9 +76,11 @@ class RegistrationController extends Controller
         $validated = $request->validate(['raison' => ['required', 'string', 'max:2000']]);
 
         DB::transaction(function () use ($inscription, $validated) {
+            $entity = $inscription->registrationEntity();
+
             $inscription->update(['statut' => Inscription::STATUS_REJECTED]);
-            $inscription->transporteur?->update(['statut' => Inscription::STATUS_REJECTED]);
-            $inscription->transporteur?->user?->update(['statut' => Inscription::STATUS_REJECTED]);
+            $entity?->update(['statut' => Inscription::STATUS_REJECTED]);
+            $entity?->user?->update(['statut' => Inscription::STATUS_REJECTED]);
 
             $inscription->rejetinscriptions()
                 ->where('statut', 'active')
@@ -82,7 +91,7 @@ class RegistrationController extends Controller
                 'statut' => 'active',
             ]);
 
-            $inscription->transporteur?->user?->notify(
+            $entity?->user?->notify(
                 new RegistrationRejected($validated['raison'], $inscription->numero_dossier)
             );
         });

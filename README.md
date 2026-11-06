@@ -12,22 +12,29 @@ des transporteurs (sociétés et particuliers).
 
 ## Fonctionnement de l'inscription
 
-1. Le visiteur choisit son type de compte : **société** ou **particulier**.
+1. Le visiteur choisit son type de compte : **société**, **transitaire** ou
+   **particulier**.
 2. Les pays proposés viennent de la table `pays`.
 3. Les pièces à fournir viennent de la table `piece_a_fournir` :
    - `CFE` pour les sociétés ;
    - `CNI` pour les particuliers.
 4. Les fichiers acceptés sont configurables par pièce via la colonne `extension`
    (PDF, JPG, JPEG et PNG par défaut), dans la limite de 10 Mo.
-5. Le dossier est créé avec le statut `pending`, le compte utilisateur aussi.
-6. L'utilisateur vérifie son email via un lien signé.
-7. Un administrateur valide ou rejette le dossier depuis `/admin/registrations`.
-8. En cas de rejet, le demandeur peut corriger et resoumettre son dossier depuis
+5. Une inscription **transitaire** crée une ligne dans la table dédiée
+   `transitaire` (et renseigne `users.idtransitaire` /
+   `inscription.idtransitaire`). Les types **société** et **particulier**
+   restent dans la table `transporteur`.
+6. Le dossier est créé avec le statut `pending`, le compte utilisateur aussi.
+   Le rôle est assigné immédiatement : `transporteur` pour société/particulier,
+   `transitaire` pour transitaire.
+7. L'utilisateur vérifie son email via un lien signé.
+8. Un administrateur valide ou rejette le dossier depuis `/admin/registrations`.
+9. En cas de rejet, le demandeur peut corriger et resoumettre son dossier depuis
    la page de suivi (`/registration/status`).
 
 Le numéro de dossier (`DOS-AAAAMMJJ-XXXXXX`) et les clés métier
-(`keyinscription`, `keytransporteur`, `keypieceinscription`, `keyuser`) sont
-générés automatiquement par les modèles.
+(`keyinscription`, `keytransporteur`, `keytransitaire`, `keypieceinscription`,
+`keyuser`) sont générés automatiquement par les modèles.
 
 ## Installation
 
@@ -66,7 +73,7 @@ Les seeders créent également :
 
 - les pays (`PaysSeeder`) ;
 - les pièces CFE et CNI (`PieceAFournirSeeder`) ;
-- les rôles `admin` et `transporteur` (`RoleSeeder`).
+- les rôles `admin`, `transporteur` et `transitaire` (`RoleSeeder`).
 
 ## Stockage des documents
 

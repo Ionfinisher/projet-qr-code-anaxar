@@ -7,6 +7,7 @@ use App\Models\Inscription;
 use App\Models\Pays;
 use App\Models\PieceAFournir;
 use App\Models\PieceInscription;
+use App\Models\Transitaire;
 use App\Models\Transporteur;
 use App\Models\User;
 use App\Notifications\VerifyRegistrationEmail;
@@ -20,6 +21,7 @@ use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class RegisteredUserController extends Controller
 {
@@ -79,39 +81,24 @@ class RegisteredUserController extends Controller
         $request->validate($this->documentRules($pieces));
 
         [$user, $inscription] = DB::transaction(function () use ($data, $request, $pieces) {
-            $name = $data['user_type'] === PieceAFournir::TYPE_SOCIETE
-                ? $data['raison_sociale']
-                : trim(($data['prenom'] ?? '').' '.($data['nom'] ?? ''));
+            $isTransitaire = $data['user_type'] === PieceAFournir::TYPE_TRANSITAIRE;
+            $entityKey = $isTransitaire ? 'idtransitaire' : 'idtransporteur';
 
-            $transporteur = Transporteur::create([
-                'email' => $data['email'],
-                'nom' => $data['user_type'] === PieceAFournir::TYPE_PARTICULIER
-                    ? ($data['nom'] ?? null)
-                    : ($data['representant_nom'] ?? null),
-                'prenom' => $data['user_type'] === PieceAFournir::TYPE_PARTICULIER
-                    ? ($data['prenom'] ?? null)
-                    : ($data['representant_prenom'] ?? null),
-                'raisonsociale' => $data['raison_sociale'] ?? null,
-                'typetransporteur' => $data['user_type'],
-                'nif' => $data['nif'] ?? null,
-                'rccm' => $data['rccm'] ?? null,
-                'fonction_representant' => $data['fonction_representant'] ?? null,
-                'telephone' => $data['telephone'],
-                'adresse' => $data['adresse'] ?? null,
-                'ville' => $data['ville'] ?? null,
-                'nombre_camions' => $data['nombre_camions'] ?? null,
-                'statut' => Transporteur::STATUS_PENDING,
-            ]);
+            $attributes = $this->registrationAttributes($data);
+
+            $entity = $isTransitaire
+                ? Transitaire::create($attributes)
+                : Transporteur::create([...$attributes, 'typetransporteur' => $data['user_type']]);
 
             $inscription = Inscription::create([
                 'email' => $data['email'],
                 'statut' => Inscription::STATUS_PENDING,
                 'token' => Str::random(40),
-                'idtransporteur' => $transporteur->getKey(),
+                $entityKey => $entity->getKey(),
             ]);
 
             $user = User::create([
-                'name' => $name,
+                'name' => $this->displayName($data),
                 'nom' => $data['nom'] ?? null,
                 'prenom' => $data['prenom'] ?? null,
                 'email' => $data['email'],
@@ -120,9 +107,14 @@ class RegisteredUserController extends Controller
                 'adresse' => $data['adresse'] ?? null,
                 'user_type' => $data['user_type'],
                 'idpays' => $data['idpays'],
-                'idtransporteur' => $transporteur->getKey(),
+                $entityKey => $entity->getKey(),
                 'statut' => User::STATUS_PENDING,
             ]);
+
+            $user->assignRole(Role::findOrCreate(
+                $isTransitaire ? 'transitaire' : 'transporteur',
+                'web'
+            ));
 
             foreach ($pieces as $piece) {
                 $file = $request->file("documents.{$piece->id}");
@@ -148,6 +140,48 @@ class RegisteredUserController extends Controller
         return redirect()
             ->route('login')
             ->with('success', "Votre dossier {$inscription->numero_dossier} a été créé. Vérifiez votre email ({$user->email}) pour continuer.");
+    }
+
+    /**
+     * Attributs métier communs aux tables transporteur et transitaire.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function registrationAttributes(array $data): array
+    {
+        $isParticulier = $data['user_type'] === PieceAFournir::TYPE_PARTICULIER;
+
+        return [
+            'email' => $data['email'],
+            'nom' => $isParticulier ? ($data['nom'] ?? null) : ($data['representant_nom'] ?? null),
+            'prenom' => $isParticulier ? ($data['prenom'] ?? null) : ($data['representant_prenom'] ?? null),
+            'raisonsociale' => $data['raison_sociale'] ?? null,
+            'nif' => $data['nif'] ?? null,
+            'rccm' => $data['rccm'] ?? null,
+            'fonction_representant' => $data['fonction_representant'] ?? null,
+            'telephone' => $data['telephone'],
+            'adresse' => $data['adresse'] ?? null,
+            'ville' => $data['ville'] ?? null,
+            'nombre_camions' => $data['nombre_camions'] ?? null,
+            'statut' => Transporteur::STATUS_PENDING,
+        ];
+    }
+
+    /**
+     * Nom d'affichage du compte : raison sociale pour les personnes morales,
+     * prénom + nom pour les particuliers.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function displayName(array $data): string
+    {
+        return in_array($data['user_type'], [
+            PieceAFournir::TYPE_SOCIETE,
+            PieceAFournir::TYPE_TRANSITAIRE,
+        ], true)
+            ? (string) ($data['raison_sociale'] ?? '')
+            : trim(($data['prenom'] ?? '').' '.($data['nom'] ?? ''));
     }
 
     /**
