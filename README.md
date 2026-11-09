@@ -90,8 +90,8 @@ administrateurs.
 | GET/POST | `/login` | Connexion |
 | GET | `/registration/status` | Suivi de dossier |
 | GET | `/registration/verify/{id}/{hash}` | Vérification email (lien signé) |
-| GET | `/registration/{numeroDossier}/edit` | Formulaire de correction (email en query) |
-| POST | `/registration/{numeroDossier}` | Resoumission d'un dossier rejeté |
+| GET | `/registration/{numeroDossier}/edit` | Correction en 4 étapes (email actuel en query) |
+| POST | `/registration/{numeroDossier}` | Resoumission (`current_email` requis ; `email` et `password` facultatifs) |
 | GET | `/admin/registrations` | Liste des dossiers (admin) |
 | POST | `/admin/registrations/{id}/approve` | Valider un dossier |
 | POST | `/admin/registrations/{id}/reject` | Rejeter un dossier |

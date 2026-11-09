@@ -61,6 +61,12 @@ function RegistrationDetails({ registration }) {
                 </div>
             </div>
 
+            {registration.can_edit && registration.edit_url && (
+                <div className="flex">
+                    <Link href={registration.edit_url} className={buttonClass()}><Icon name="pencil" size={18} /> Compléter ma demande</Link>
+                </div>
+            )}
+
             <Card>
                 <SectionTitle icon="building-2">Identité</SectionTitle>
                 <KeyValues items={registration.identity || []} />
@@ -106,10 +112,6 @@ function RegistrationDetails({ registration }) {
                 </ol>
             </Card>
 
-            <div className="flex flex-wrap gap-2">
-                {registration.can_edit && registration.edit_url && <Link href={registration.edit_url} className={buttonClass()}><Icon name="pencil" size={18} /> Compléter ma demande</Link>}
-                <Link href={route('login')} className={buttonClass({ variant: 'ghost' })}>Retour à la connexion</Link>
-            </div>
         </div>
     );
 }
