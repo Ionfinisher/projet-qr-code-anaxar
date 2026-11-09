@@ -20,12 +20,14 @@ const STEPS = [
 export default function Register({ pays = [], pieces = [] }) {
     const [step, setStep] = useState(0);
     const [cguAccepted, setCguAccepted] = useState(false);
+    const [cgaAccepted, setCgaAccepted] = useState(false);
     const [stepErrors, setStepErrors] = useState({});
     const panelRef = useRef(null);
 
     const { data, setData, post, processing, errors, reset } = useForm({
         user_type: 'societe',
         idpays: '',
+        phone_pays_id: '',
         raison_sociale: '',
         nif: '',
         rccm: '',
@@ -55,9 +57,9 @@ export default function Register({ pays = [], pieces = [] }) {
         const errorKeys = Object.keys(errors);
         if (errorKeys.length === 0) return;
 
-        if (errorKeys.some((k) => ['user_type', 'raison_sociale', 'nif', 'rccm', 'representant_nom', 'representant_prenom', 'fonction_representant', 'nom', 'prenom', 'adresse', 'ville', 'nombre_camions'].includes(k))) {
+        if (errorKeys.some((k) => ['user_type', 'idpays', 'raison_sociale', 'nif', 'rccm', 'representant_nom', 'representant_prenom', 'fonction_representant', 'nom', 'prenom', 'adresse', 'ville', 'nombre_camions'].includes(k))) {
             setStep(0);
-        } else if (errorKeys.some((k) => ['idpays', 'telephone', 'email', 'password', 'password_confirmation'].includes(k))) {
+        } else if (errorKeys.some((k) => ['phone_pays_id', 'telephone', 'email', 'password', 'password_confirmation'].includes(k))) {
             setStep(1);
         } else if (errorKeys.some((k) => k.startsWith('documents.'))) {
             setStep(2);
@@ -82,6 +84,7 @@ export default function Register({ pays = [], pieces = [] }) {
     const validateStep = (s) => {
         const errs = {};
         if (s === 0) {
+            if (!data.idpays) errs.idpays = 'Veuillez sélectionner un pays.';
             const business = ['societe', 'transitaire'].includes(data.user_type);
             if (business && !data.raison_sociale.trim()) {
                 errs.raison_sociale = 'La raison sociale est requise.';
@@ -98,7 +101,6 @@ export default function Register({ pays = [], pieces = [] }) {
                 if (!data.prenom.trim()) errs.prenom = 'Le prénom est requis.';
             }
         } else if (s === 1) {
-            if (!data.idpays) errs.idpays = 'Veuillez sélectionner un pays.';
             if (!data.telephone.trim()) errs.telephone = 'Le numéro de téléphone est requis.';
             if (!data.email.trim()) errs.email = 'L’adresse e-mail est requise.';
             if (!data.password) errs.password = 'Le mot de passe est requis.';
@@ -148,6 +150,7 @@ export default function Register({ pays = [], pieces = [] }) {
     };
 
     const selectedCountry = pays.find((p) => String(p.id) === String(data.idpays));
+    const selectedPhoneCountry = pays.find((p) => String(p.id) === String(data.phone_pays_id || data.idpays));
 
     return (
         <PublicLayout wide>
@@ -184,8 +187,8 @@ export default function Register({ pays = [], pieces = [] }) {
                                                     ok
                                                         ? 'bg-emerald-600 text-white'
                                                         : current
-                                                        ? 'bg-brand-600 text-white'
-                                                        : 'bg-slate-200 text-slate-600'
+                                                            ? 'bg-brand-600 text-white'
+                                                            : 'bg-slate-200 text-slate-600'
                                                 )}
                                             >
                                                 {ok ? <Icon name="check" size={15} strokeWidth={3} /> : i + 1}
@@ -251,22 +254,22 @@ export default function Register({ pays = [], pieces = [] }) {
                                     options={[
                                         {
                                             value: 'societe',
-                                        label: 'Entreprise de transport',
-                                        description: 'Société disposant d’une flotte de camions.',
+                                            label: 'Entreprise de transport',
+                                            description: 'Société disposant d’une flotte de camions.',
                                             icon: 'building-2',
                                         },
                                         {
-                                        value: 'transitaire',
-                                        label: 'Transitaire · commissionnaire en douane',
-                                        description: 'Réserve pour le compte de transporteurs mandatés.',
-                                        icon: 'briefcase-business',
+                                            value: 'transitaire',
+                                            label: 'Transitaire · commissionnaire en douane',
+                                            description: 'Réserve pour le compte de transporteurs mandatés.',
+                                            icon: 'briefcase-business',
                                         },
-                                    {
-                                        value: 'particulier',
-                                        label: 'Transporteur particulier',
-                                        description: 'Propriétaire-exploitant d’un ou plusieurs camions.',
-                                        icon: 'user',
-                                    },
+                                        {
+                                            value: 'particulier',
+                                            label: 'Transporteur particulier',
+                                            description: 'Propriétaire-exploitant d’un ou plusieurs camions.',
+                                            icon: 'user',
+                                        },
                                     ]}
                                 />
                             </div>
@@ -274,30 +277,30 @@ export default function Register({ pays = [], pieces = [] }) {
                             {['societe', 'transitaire'].includes(data.user_type) ? (
                                 <>
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                    <Field id="reg-raison" label="Raison sociale" required error={errors.raison_sociale || stepErrors.raison_sociale}>
-                                        <Input id="reg-raison" placeholder="Ex. Transports Togolais Réunis SARL" value={data.raison_sociale} onChange={(e) => setData('raison_sociale', e.target.value)} />
-                                    </Field>
-                                    <Field id="reg-nif" label="NIF" required hint="Numéro d’identification fiscale." error={errors.nif || stepErrors.nif}>
-                                        <Input id="reg-nif" value={data.nif} onChange={(e) => setData('nif', e.target.value.toUpperCase())} />
-                                    </Field>
-                                    <Field id="reg-rccm" label="N° RCCM" required hint="Ex. TG-LOM 2019 B 1234." error={errors.rccm || stepErrors.rccm}>
-                                        <Input id="reg-rccm" value={data.rccm} onChange={(e) => setData('rccm', e.target.value.toUpperCase())} />
-                                    </Field>
+                                        <Field id="reg-raison" label="Raison sociale" required error={errors.raison_sociale || stepErrors.raison_sociale}>
+                                            <Input id="reg-raison" placeholder="Ex. Transports Togolais Réunis SARL" value={data.raison_sociale} onChange={(e) => setData('raison_sociale', e.target.value)} />
+                                        </Field>
+                                        <Field id="reg-nif" label="NIF" required hint="Numéro d’identification fiscale." error={errors.nif || stepErrors.nif}>
+                                            <Input id="reg-nif" value={data.nif} onChange={(e) => setData('nif', e.target.value.toUpperCase())} />
+                                        </Field>
+                                        <Field id="reg-rccm" label="N° RCCM" required hint="Ex. TG-LOM 2019 B 1234." error={errors.rccm || stepErrors.rccm}>
+                                            <Input id="reg-rccm" value={data.rccm} onChange={(e) => setData('rccm', e.target.value.toUpperCase())} />
+                                        </Field>
                                     </div>
                                     <Field id="reg-adresse" label="Adresse du siège" required error={errors.adresse || stepErrors.adresse}>
-                                    <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
+                                        <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
                                     </Field>
                                     <p className="text-sm font-semibold text-slate-700">Représentant légal</p>
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                                    <Field id="reg-rep-prenom" label="Prénom" required error={errors.representant_prenom || stepErrors.representant_prenom}>
-                                        <Input id="reg-rep-prenom" value={data.representant_prenom} onChange={(e) => setData('representant_prenom', e.target.value)} />
-                                    </Field>
-                                    <Field id="reg-rep-nom" label="Nom" required error={errors.representant_nom || stepErrors.representant_nom}>
-                                        <Input id="reg-rep-nom" value={data.representant_nom} onChange={(e) => setData('representant_nom', e.target.value)} />
-                                    </Field>
-                                    <Field id="reg-rep-fonction" label="Fonction" required error={errors.fonction_representant || stepErrors.fonction_representant}>
-                                        <Input id="reg-rep-fonction" placeholder="Ex. Gérante" value={data.fonction_representant} onChange={(e) => setData('fonction_representant', e.target.value)} />
-                                    </Field>
+                                        <Field id="reg-rep-prenom" label="Prénom" required error={errors.representant_prenom || stepErrors.representant_prenom}>
+                                            <Input id="reg-rep-prenom" value={data.representant_prenom} onChange={(e) => setData('representant_prenom', e.target.value)} />
+                                        </Field>
+                                        <Field id="reg-rep-nom" label="Nom" required error={errors.representant_nom || stepErrors.representant_nom}>
+                                            <Input id="reg-rep-nom" value={data.representant_nom} onChange={(e) => setData('representant_nom', e.target.value)} />
+                                        </Field>
+                                        <Field id="reg-rep-fonction" label="Fonction" required error={errors.fonction_representant || stepErrors.fonction_representant}>
+                                            <Input id="reg-rep-fonction" placeholder="Ex. Gérante" value={data.fonction_representant} onChange={(e) => setData('fonction_representant', e.target.value)} />
+                                        </Field>
                                     </div>
                                 </>
                             ) : (
@@ -332,18 +335,75 @@ export default function Register({ pays = [], pieces = [] }) {
                             )}
 
                             {['societe', 'transitaire'].includes(data.user_type) ? (
-                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                                    <Field id="reg-pays-identite" label="Pays" required error={errors.idpays || stepErrors.idpays}>
+                                        <Select
+                                            id="reg-pays-identite"
+                                            value={data.idpays}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setData((prev) => ({
+                                                    ...prev,
+                                                    idpays: val,
+                                                    phone_pays_id: prev.phone_pays_id || val,
+                                                }));
+                                            }}
+                                            aria-label="Pays de l'entreprise"
+                                        >
+                                            <option value="" disabled>
+                                                Sélectionner un pays
+                                            </option>
+                                            {pays.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.nom}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </Field>
                                     <Field id="reg-ville" label="Ville" required error={errors.ville || stepErrors.ville}>
                                         <Input id="reg-ville" placeholder="Ex. Lomé" value={data.ville} onChange={(e) => setData('ville', e.target.value)} />
                                     </Field>
+                                    {['societe', 'particulier'].includes(data.user_type) ?
+                                        <Field id="reg-camions" label="Nombre de camions" optional error={errors.nombre_camions || stepErrors.nombre_camions}>
+                                            <Input id="reg-camions" type="number" min="0" max="5000" value={data.nombre_camions} onChange={(e) => setData('nombre_camions', e.target.value)} />
+                                        </Field> :
+                                        null}
+
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                    <Field id="reg-pays-identite" label="Pays" required error={errors.idpays || stepErrors.idpays}>
+                                        <Select
+                                            id="reg-pays-identite"
+                                            value={data.idpays}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                setData((prev) => ({
+                                                    ...prev,
+                                                    idpays: val,
+                                                    phone_pays_id: prev.phone_pays_id || val,
+                                                }));
+                                            }}
+                                            aria-label="Pays de résidence"
+                                        >
+                                            <option value="" disabled>
+                                                Sélectionner un pays
+                                            </option>
+                                            {pays.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.nom}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                    </Field>
+                                    <Field id="reg-adresse" label="Adresse du siège / Domicile" error={errors.adresse || stepErrors.adresse}>
+                                        <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
+                                    </Field>
+
                                     <Field id="reg-camions" label="Nombre de camions" optional error={errors.nombre_camions || stepErrors.nombre_camions}>
                                         <Input id="reg-camions" type="number" min="0" max="5000" value={data.nombre_camions} onChange={(e) => setData('nombre_camions', e.target.value)} />
                                     </Field>
                                 </div>
-                            ) : (
-                                <Field id="reg-adresse" label="Adresse du siège / Domicile" error={errors.adresse || stepErrors.adresse}>
-                                    <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
-                                </Field>
                             )}
                         </div>
                     )}
@@ -355,19 +415,19 @@ export default function Register({ pays = [], pieces = [] }) {
                                 id="reg-phone"
                                 label="Téléphone mobile"
                                 required
-                                error={errors.idpays || errors.telephone || stepErrors.idpays || stepErrors.telephone}
+                                error={errors.phone_pays_id || errors.telephone || stepErrors.phone_pays_id || stepErrors.telephone}
                                 hint="Reçoit les SMS et sert d’identifiant de contact."
                             >
                                 <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
                                     <Select
                                         id="reg-pays"
-                                        value={data.idpays}
-                                        onChange={(e) => setData('idpays', e.target.value)}
+                                        value={data.phone_pays_id || data.idpays}
+                                        onChange={(e) => setData('phone_pays_id', e.target.value)}
                                         aria-label="Pays et indicatif téléphonique"
-                                        aria-invalid={errors.idpays || stepErrors.idpays ? 'true' : undefined}
+                                        aria-invalid={errors.phone_pays_id || stepErrors.phone_pays_id ? 'true' : undefined}
                                     >
                                         <option value="" disabled>
-                                            Sélectionner un pays
+                                            Sélectionner un indicatif
                                         </option>
                                         {pays.map((p) => (
                                             <option key={p.id} value={p.id}>
@@ -461,8 +521,8 @@ export default function Register({ pays = [], pieces = [] }) {
                                                     file
                                                         ? 'border-emerald-200 bg-emerald-50/30'
                                                         : docError
-                                                        ? 'border-rose-300 bg-rose-50/20'
-                                                        : 'border-slate-200 bg-slate-50/40 hover:border-slate-300'
+                                                            ? 'border-rose-300 bg-rose-50/20'
+                                                            : 'border-slate-200 bg-slate-50/40 hover:border-slate-300'
                                                 )}
                                             >
                                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -553,9 +613,15 @@ export default function Register({ pays = [], pieces = [] }) {
                                         </dd>
                                     </div>
                                     <div>
-                                        <dt className="text-xs text-slate-500">Pays & Téléphone</dt>
+                                        <dt className="text-xs text-slate-500">Pays (Identité)</dt>
+                                        <dd className="font-semibold text-slate-900">
+                                            {selectedCountry?.nom || '—'}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-xs text-slate-500">Téléphone de contact</dt>
                                         <dd className="text-slate-900">
-                                            {selectedCountry?.nom || '—'} · {data.telephone}
+                                            {selectedPhoneCountry?.indicatif ? `+${String(selectedPhoneCountry.indicatif).replace(/^\+/, '')} ` : ''}{data.telephone}
                                         </dd>
                                     </div>
                                     <div>
@@ -603,6 +669,16 @@ export default function Register({ pays = [], pieces = [] }) {
                                     J’accepte les Conditions Générales d’Utilisation (CGU) et certifie sur l’honneur l’exactitude de l’ensemble des informations et documents fournis.
                                 </span>
                             </label>
+                            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                                <Checkbox
+                                    checked={cgaAccepted}
+                                    onChange={setCgaAccepted}
+                                    className="mt-0.5"
+                                />
+                                <span className="text-sm text-slate-700 leading-snug">
+                                    J’accepte le traitement de mes données pour l’examen de ma demande et la gestion de mon compte.
+                                    Loi n° 2019-014 du 29 octobre 2019 relative à la protection des données à caractère personnel.                                </span>
+                            </label>
                         </div>
                     )}
 
@@ -627,7 +703,7 @@ export default function Register({ pays = [], pieces = [] }) {
                                 icon="send"
                                 type="button"
                                 loading={processing}
-                                disabled={processing || !cguAccepted}
+                                disabled={processing || !cguAccepted || !cgaAccepted}
                                 onClick={submit}
                             >
                                 {processing ? 'Envoi en cours…' : 'Envoyer ma demande'}

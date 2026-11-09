@@ -514,6 +514,45 @@ class RegistrationWorkflowTest extends TestCase
             ->where('registration.identity.1.value', 'Lagune Transit SARL'));
     }
 
+    public function test_registration_with_separate_identity_country_and_phone_country(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+
+        $togo = Pays::create(['code' => 'TG', 'nom' => 'Togo', 'indicatif' => '+228']);
+        $benin = Pays::create(['code' => 'BJ', 'nom' => 'Bénin', 'indicatif' => '+229']);
+        $piece = $this->createPiece();
+
+        $payload = [
+            'user_type' => 'societe',
+            'idpays' => $togo->id,
+            'phone_pays_id' => $benin->id,
+            'raison_sociale' => 'Benin Togo Transport',
+            'nif' => 'TG1000999999',
+            'rccm' => 'TG-LOM 2024 B 9999',
+            'representant_nom' => 'KOFFI',
+            'representant_prenom' => 'Jean',
+            'fonction_representant' => 'Directeur',
+            'telephone' => '90 12 34 56',
+            'adresse' => 'Zone Portuaire',
+            'ville' => 'Lomé',
+            'email' => 'benin-togo@example.com',
+            'password' => 'Password1!Long',
+            'password_confirmation' => 'Password1!Long',
+            'documents' => [
+                $piece->id => UploadedFile::fake()->create('cfe.pdf', 100, 'application/pdf'),
+            ],
+        ];
+
+        $response = $this->post('/register', $payload);
+        $response->assertRedirect(route('login'));
+
+        $user = User::where('email', 'benin-togo@example.com')->firstOrFail();
+        $this->assertSame($togo->id, $user->idpays);
+        // The indicatif from phone_pays_id (+229) should be prepended to the phone number
+        $this->assertSame('+22990123456', $user->telephone);
+    }
+
     private function createRejectedRegistration(): Inscription
     {
         $transporteur = Transporteur::create([

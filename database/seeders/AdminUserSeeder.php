@@ -37,5 +37,9 @@ class AdminUserSeeder extends Seeder
         }
 
         $user->assignRole('admin');
+
+        // Associer les profils internes bureau et guerite à cet administrateur
+        \Spatie\Permission\Models\Role::whereIn('name', ['bureau', 'guerite'])
+            ->update(['created_by' => $user->id]);
     }
 }

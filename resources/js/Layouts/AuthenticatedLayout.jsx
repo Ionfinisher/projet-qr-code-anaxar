@@ -8,6 +8,7 @@ import { Drawer } from '@/Components/ui/Overlay';
 import { Avatar } from '@/Components/ui/Data';
 import FlashAlerts from '@/Components/FlashAlerts';
 import { cn } from '@/Lib/cn';
+import { TransporteurLayout } from '@/Layouts/TransporteurLayout';
 
 export default function AuthenticatedLayout({ user: propUser, header, children }) {
     const page = usePage();
@@ -21,13 +22,25 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
     const userRole = user?.is_admin
         ? 'Administration'
         : user?.user_type === 'societe'
-        ? (user?.raisonsociale || 'Société')
-        : 'Transporteur';
+            ? (user?.raisonsociale || 'Société')
+            : user?.user_type === 'particulier'
+                ? 'Transporteur'
+                : user?.user_type === 'transitaire'
+                    ? (user?.raisonsociale || 'Transitaire')
+                    : 'Utilisateur';
 
     const approved = !user?.statut || ['approved', 'active'].includes(user.statut);
     const isTransporteur = !user?.is_admin
         && approved
         && ['societe', 'transitaire', 'particulier'].includes(user?.user_type);
+
+    if (isTransporteur) {
+        return (
+            <TransporteurLayout user={user} header={header}>
+                {children}
+            </TransporteurLayout>
+        );
+    }
 
     const navigation = [
         {
@@ -105,18 +118,18 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
         {
             key: 'users',
             label: 'Utilisateurs',
-            href: routeExists('users.index') ? route('users.index') : '#',
-            active: isCurrent('users.*'),
+            href: routeExists('admin.utilisateurs.index') ? route('admin.utilisateurs.index') : '#',
+            active: isCurrent('admin.utilisateurs.*'),
             icon: 'users',
-            visible: (!!user?.is_admin || user?.user_type === 'societe') && routeExists('users.index'),
+            visible: !!user?.is_admin && routeExists('admin.utilisateurs.index'),
         },
         {
             key: 'profiles',
             label: 'Profils',
-            href: routeExists('profiles.index') ? route('profiles.index') : '#',
-            active: isCurrent('profiles.*'),
+            href: routeExists('admin.profils.index') ? route('admin.profils.index') : '#',
+            active: isCurrent('admin.profils.*'),
             icon: 'shield',
-            visible: (!!user?.is_admin || user?.user_type === 'societe') && routeExists('profiles.index'),
+            visible: !!user?.is_admin && routeExists('admin.profils.index'),
         },
         {
             key: 'permissions',
@@ -147,8 +160,8 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
                                 ? 'bg-white/10 text-white'
                                 : 'text-slate-400 hover:bg-white/5 hover:text-white'
                             : m.active
-                            ? 'bg-brand-50 text-brand-800'
-                            : 'text-slate-700 hover:bg-slate-100'
+                                ? 'bg-brand-50 text-brand-800'
+                                : 'text-slate-700 hover:bg-slate-100'
                     )}
                 >
                     {isDark && (

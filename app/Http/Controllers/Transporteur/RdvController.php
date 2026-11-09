@@ -113,7 +113,10 @@ class RdvController extends Controller
         }
 
         $selectedRdv = null;
-        if ($selectedId) {
+        if (! $selectedId && $allRdvs->isNotEmpty()) {
+            $selectedRdv = $allRdvs->first();
+            $selectedId = $selectedRdv['id'] ?? null;
+        } elseif ($selectedId) {
             $selectedRdv = $allRdvs->firstWhere('id', $selectedId);
             if (! $selectedRdv) {
                 $extra = $allCamions->first(function ($c) use ($selectedId) {

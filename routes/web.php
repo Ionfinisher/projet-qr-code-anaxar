@@ -4,6 +4,8 @@ use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationContro
 use App\Http\Controllers\Admin\CreneauController;
 use App\Http\Controllers\Admin\DemandeRdvController as AdminDemandeRdvController;
 use App\Http\Controllers\Admin\RdvController as AdminRdvController;
+use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CompanyUserController;
 use App\Http\Controllers\ProfileController;
@@ -71,6 +73,18 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
         ->name('demandes.documents.download');
 
     Route::get('/rendez-vous', [AdminRdvController::class, 'index'])->name('rdv.index');
+
+    Route::get('/profils', [AdminProfileController::class, 'index'])->name('profils.index');
+    Route::post('/profils', [AdminProfileController::class, 'store'])->name('profils.store');
+    Route::put('/profils/{role}', [AdminProfileController::class, 'update'])->name('profils.update');
+    Route::delete('/profils/{role}', [AdminProfileController::class, 'destroy'])->name('profils.destroy');
+
+    Route::get('/utilisateurs', [AdminUserController::class, 'index'])->name('utilisateurs.index');
+    Route::post('/utilisateurs', [AdminUserController::class, 'store'])->name('utilisateurs.store');
+    Route::put('/utilisateurs/{user}', [AdminUserController::class, 'update'])->name('utilisateurs.update');
+    Route::patch('/utilisateurs/{user}/toggle', [AdminUserController::class, 'toggle'])->name('utilisateurs.toggle');
+    Route::post('/utilisateurs/{user}/reset-password', [AdminUserController::class, 'resetPassword'])->name('utilisateurs.reset-password');
+    Route::delete('/utilisateurs/{user}', [AdminUserController::class, 'destroy'])->name('utilisateurs.destroy');
 });
 
 Route::middleware(['auth', 'verified', 'transporteur'])
@@ -98,7 +112,7 @@ Route::middleware(['auth', 'verified', 'transporteur'])
             ->name('uploads.destroy');
     });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::middleware('verified')->group(function () {
         Route::resource('profiles', ProfileRoleController::class)->except(['show']);
     });
@@ -118,6 +132,9 @@ Route::middleware('auth')->group(function () {
         Route::put('/permissions/{permission}', [PermissionController::class, 'update'])->name('permissions.update');
         Route::delete('/permissions/{permission}', [PermissionController::class, 'destroy'])->name('permissions.destroy');
     });
+});
+
+Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');

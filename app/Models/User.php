@@ -51,6 +51,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'user_type',
         'must_change_password',
+        'fonction',
+        'last_login_at',
     ];
 
     /**
@@ -74,6 +76,7 @@ class User extends Authenticatable implements MustVerifyEmail
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
         'must_change_password' => 'boolean',
+        'last_login_at' => 'datetime',
     ];
 
     public function transporteur()

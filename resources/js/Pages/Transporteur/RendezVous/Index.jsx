@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import { TransporteurLayout } from '@/Layouts/TransporteurLayout';
 import { PageHeader, SearchInput } from '@/Components/ui/Navigation';
 import { Segmented } from '@/Components/ui/Choice';
 import { EmptyState } from '@/Components/ui/Feedback';
@@ -21,6 +21,7 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
     const [filter, setFilter] = useState(filters.status || 'all');
     const [search, setSearch] = useState(filters.q || '');
     const [selectedId, setSelectedId] = useState(filters.id || selected?.id || null);
+    const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
     const now = Date.now();
     const today = dayStr(now);
@@ -79,6 +80,20 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
         });
     }, [rdvs, search]);
 
+    // Active selected rdv (first selected by default if none or not in list)
+    const activeId = useMemo(() => {
+        if (selectedId && filteredList.some((r) => r.id === selectedId)) {
+            return selectedId;
+        }
+        return filteredList[0]?.id || null;
+    }, [selectedId, filteredList]);
+
+    const activeRdv = useMemo(() => {
+        if (!activeId) return null;
+        if (selected && selected.id === activeId) return selected;
+        return rdvs.find((r) => r.id === activeId) || selected || null;
+    }, [rdvs, activeId, selected]);
+
     // Grouping by date
     const groups = useMemo(() => {
         const map = new Map();
@@ -106,43 +121,19 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
         }));
     }, [filteredList, today]);
 
-    const activeRdv = useMemo(() => {
-        if (!selectedId) return null;
-        if (selected && selected.id === selectedId) return selected;
-        return rdvs.find((r) => r.id === selectedId) || selected || null;
-    }, [rdvs, selectedId, selected]);
-
-    const handleSelectRdv = (r) => {
+    const handleSelectRdv = (r, openMobile = true) => {
         setSelectedId(r.id);
-        router.get(
-            route('transporteur.rdv.index'),
-            {
-                status: filter,
-                q: search || undefined,
-                id: r.id,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            }
-        );
+        if (openMobile) {
+            setMobileDrawerOpen(true);
+        }
+        // Update URL state without full page refresh
+        const url = new URL(window.location.href);
+        url.searchParams.set('id', r.id);
+        window.history.replaceState({}, '', url.toString());
     };
 
     const handleCloseDrawer = () => {
-        setSelectedId(null);
-        router.get(
-            route('transporteur.rdv.index'),
-            {
-                status: filter,
-                q: search || undefined,
-            },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-            }
-        );
+        setMobileDrawerOpen(false);
     };
 
     const segmentedOptions = FILTERS.map((f) => ({
@@ -152,8 +143,8 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
     }));
 
     return (
-        <AuthenticatedLayout user={auth?.user}>
-            <Head title="Rendez-vous" />
+        <TransporteurLayout user={auth?.user}>
+            <Head title="Rendez-vous validés" />
 
             <div className="flex flex-col gap-6">
                 <PageHeader
@@ -202,35 +193,54 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
                             : 'Les rendez-vous apparaissent ici dès que l’administration valide vos demandes.'}
                     </EmptyState>
                 ) : (
-                    <div className="flex flex-col gap-6">
-                        {groups.map((g) => (
-                            <section
-                                key={g.date}
-                                className="flex flex-col gap-2.5"
-                                aria-label={relDay(g.date, today)}
-                            >
-                                <DayLabel date={g.date} today={today} count={g.items.length} />
-                                {g.items.map((r) => {
-                                    const st = statusOf(r, now);
-                                    return (
-                                        <RdvRow
-                                            key={r.id}
-                                            r={r}
-                                            st={st}
-                                            now={now}
-                                            current={r.id === selectedId}
-                                            onClick={() => handleSelectRdv(r)}
-                                        />
-                                    );
-                                })}
-                            </section>
-                        ))}
+                    <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(340px,440px)_minmax(0,1fr)]">
+                        {/* Colonne de gauche : liste des rendez-vous */}
+                        <div className="flex flex-col gap-6">
+                            {groups.map((g) => (
+                                <section
+                                    key={g.date}
+                                    className="flex flex-col gap-2.5"
+                                    aria-label={relDay(g.date, today)}
+                                >
+                                    <DayLabel date={g.date} today={today} count={g.items.length} />
+                                    {g.items.map((r) => {
+                                        const st = statusOf(r, now);
+                                        return (
+                                            <RdvRow
+                                                key={r.id}
+                                                r={r}
+                                                st={st}
+                                                now={now}
+                                                current={r.id === activeId}
+                                                onClick={() => handleSelectRdv(r, true)}
+                                            />
+                                        );
+                                    })}
+                                </section>
+                            ))}
+                        </div>
+
+                        {/* Colonne de droite (Desktop) : Détail complet sticky */}
+                        <div className="hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+                            {activeRdv ? (
+                                <RdvDetail
+                                    rdv={activeRdv}
+                                    rdvs={rdvs}
+                                    now={now}
+                                    onSelectRdv={(r) => handleSelectRdv(r, false)}
+                                />
+                            ) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+                                    Sélectionnez un rendez-vous dans la liste pour afficher ses détails et son pass QR.
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
-                {/* Tiroir coulissant latéral */}
+                {/* Tiroir coulissant latéral pour affichage mobile (< lg) */}
                 <Drawer
-                    open={!!selectedId}
+                    open={mobileDrawerOpen && Boolean(activeRdv)}
                     onClose={handleCloseDrawer}
                     size="lg"
                     title={activeRdv ? `Rendez-vous ${activeRdv.id}` : 'Rendez-vous'}
@@ -247,7 +257,7 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
                             rdv={activeRdv}
                             rdvs={rdvs}
                             now={now}
-                            onSelectRdv={handleSelectRdv}
+                            onSelectRdv={(r) => handleSelectRdv(r, true)}
                         />
                     ) : (
                         <EmptyState
@@ -264,7 +274,6 @@ export default function Index({ auth, rdvs = [], counts = {}, filters = {}, sele
                     )}
                 </Drawer>
             </div>
-        </AuthenticatedLayout>
+        </TransporteurLayout>
     );
 }
-

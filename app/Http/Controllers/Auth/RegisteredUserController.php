@@ -56,6 +56,7 @@ class RegisteredUserController extends Controller
         $data = $request->validate([
             'user_type' => ['required', Rule::in([PieceAFournir::TYPE_SOCIETE, PieceAFournir::TYPE_TRANSITAIRE, PieceAFournir::TYPE_PARTICULIER])],
             'idpays' => ['required', 'integer', 'exists:pays,id'],
+            'phone_pays_id' => ['nullable', 'integer', 'exists:pays,id'],
             'raison_sociale' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
             'nif' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:100'],
             'rccm' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:100'],
@@ -83,6 +84,21 @@ class RegisteredUserController extends Controller
         [$user, $inscription] = DB::transaction(function () use ($data, $request, $pieces) {
             $isTransitaire = $data['user_type'] === PieceAFournir::TYPE_TRANSITAIRE;
             $entityKey = $isTransitaire ? 'idtransitaire' : 'idtransporteur';
+
+            $rawPhone = trim((string) $data['telephone']);
+            $phoneCountry = ! empty($data['phone_pays_id'])
+                ? Pays::find($data['phone_pays_id'])
+                : Pays::find($data['idpays']);
+
+            $indicatif = $phoneCountry?->indicatif ? '+'.ltrim((string) $phoneCountry->indicatif, '+') : '';
+            if ($indicatif !== '' && ! str_starts_with($rawPhone, '+')) {
+                $cleanedDigits = ltrim(preg_replace('/\D/', '', $rawPhone), '0');
+                $telephone = $indicatif.$cleanedDigits;
+            } else {
+                $telephone = $rawPhone;
+            }
+
+            $data['telephone'] = $telephone;
 
             $attributes = $this->registrationAttributes($data);
 
