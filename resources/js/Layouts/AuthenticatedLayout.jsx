@@ -46,8 +46,10 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
         {
             key: 'dashboard',
             label: 'Tableau de bord',
-            href: route('dashboard'),
-            active: isCurrent('dashboard'),
+            href: user?.is_admin && routeExists('admin.dashboard')
+                ? route('admin.dashboard')
+                : route('dashboard'),
+            active: user?.is_admin ? isCurrent('admin.dashboard') : isCurrent('dashboard'),
             icon: 'layout-dashboard',
             visible: true,
         },
@@ -185,7 +187,7 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             {/* Desktop Sidebar */}
             <aside className="hidden bg-slate-950 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col" aria-label="Administration">
                 <div className="px-5 pb-6 pt-5">
-                    <Link href={route('dashboard')}>
+                    <Link href={user?.is_admin && routeExists('admin.dashboard') ? route('admin.dashboard') : route('dashboard')}>
                         <Logo dark sub={user?.is_admin ? 'Administration du port' : 'Plateforme PortFlow'} />
                     </Link>
                 </div>

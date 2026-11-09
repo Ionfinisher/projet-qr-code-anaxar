@@ -57,7 +57,9 @@ class AuthenticatedSessionController extends Controller
                 ->with('success', 'Vous devez modifier votre mot de passe temporaire.');
         }
 
-        return redirect()->intended(RouteServiceProvider::HOME)->with('success', 'Connexion réussie.');
+        $home = $user->isAdmin() ? route('admin.dashboard') : RouteServiceProvider::HOME;
+
+        return redirect()->intended($home)->with('success', 'Connexion réussie.');
     }
 
     /**

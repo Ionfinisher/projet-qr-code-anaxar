@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\RegistrationController as AdminRegistrationController;
 use App\Http\Controllers\Admin\CreneauController;
+use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\DemandeRdvController as AdminDemandeRdvController;
 use App\Http\Controllers\Admin\RdvController as AdminRdvController;
 use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
@@ -54,6 +55,7 @@ Route::post('/registration/{numeroDossier}', [RegistrationEditController::class,
     ->name('registration.update');
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/registrations', [AdminRegistrationController::class, 'index'])->name('registrations.index');
     Route::get('/registrations/{inscription}', [AdminRegistrationController::class, 'show'])->name('registrations.show');
     Route::post('/registrations/{inscription}/approve', [AdminRegistrationController::class, 'approve'])->name('registrations.approve');
