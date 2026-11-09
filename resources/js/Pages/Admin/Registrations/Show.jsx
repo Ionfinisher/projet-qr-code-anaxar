@@ -118,6 +118,12 @@ export default function Show({ auth, registration }) {
                                     <dt className="text-xs text-slate-500">Nom / Raison sociale</dt>
                                     <dd className="font-semibold text-slate-900">{applicantName}</dd>
                                 </div>
+                                {transporteur?.numero_piece_identite && (
+                                    <div>
+                                        <dt className="text-xs text-slate-500">N° de pièce d’identité</dt>
+                                        <dd className="font-mono text-slate-900">{transporteur.numero_piece_identite}</dd>
+                                    </div>
+                                )}
                                 <div>
                                     <dt className="text-xs text-slate-500">Adresse e-mail</dt>
                                     <dd className="font-mono text-slate-900">{registration.email}</dd>

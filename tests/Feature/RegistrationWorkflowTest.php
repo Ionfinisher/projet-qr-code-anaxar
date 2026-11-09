@@ -15,6 +15,7 @@ use App\Notifications\RegistrationRejected;
 use App\Notifications\VerifyRegistrationEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
@@ -305,16 +306,31 @@ class RegistrationWorkflowTest extends TestCase
             'idinscription' => $registration->id,
         ]);
 
+        $pays = $this->createPays();
+
         $response = $this->post(route('registration.update', $registration->numero_dossier), [
-            'email' => strtoupper($registration->email),
-            'telephone' => '+228 91 00 00 00',
+            'current_email' => strtoupper($registration->email),
+            'user_type' => 'societe',
+            'idpays' => $pays->id,
             'raison_sociale' => 'Acme Transport Corrigé',
+            'nif' => 'TG1000123456',
+            'rccm' => 'TG-LOM 2024 B 1234',
+            'representant_nom' => 'DOE',
+            'representant_prenom' => 'Jane',
+            'fonction_representant' => 'Gérante',
+            'telephone' => '+228 91 00 00 00',
+            'adresse' => 'Lomé',
+            'ville' => 'Lomé',
+            'nombre_camions' => 8,
             'documents' => [
                 $piece->id => UploadedFile::fake()->create('new.pdf', 100, 'application/pdf'),
             ],
         ]);
 
-        $response->assertRedirect(route('registration.status'));
+        $response->assertRedirect(route('registration.status.search', [
+            'email' => $registration->email,
+            'numero_dossier' => $registration->numero_dossier,
+        ]));
         $response->assertSessionHas('success');
         $this->assertSame(Inscription::STATUS_PENDING, $registration->fresh()->statut);
         $this->assertSame('pending', $registration->fresh()->transporteur->statut);
@@ -329,6 +345,181 @@ class RegistrationWorkflowTest extends TestCase
         Storage::disk('local')->assertExists($pieceInscription->piece);
 
         Notification::assertSentTo($registration->fresh()->transporteur->user, RegistrationPending::class);
+    }
+
+    public function test_rejected_registration_edit_page_exposes_full_registration_data(): void
+    {
+        $registration = $this->createRejectedRegistration();
+        $pays = $this->createPays();
+        $registration->transporteur->user->update(['idpays' => $pays->id]);
+        $piece = $this->createPiece();
+        PieceInscription::create([
+            'piece' => 'registrations/'.$registration->id.'/cfe.pdf',
+            'statut' => Inscription::STATUS_REJECTED,
+            'idpieceafournir' => $piece->id,
+            'idinscription' => $registration->id,
+        ]);
+
+        $response = $this->get(route('registration.edit', [
+            'numeroDossier' => $registration->numero_dossier,
+            'email' => $registration->email,
+        ]));
+
+        $response->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Registration/Edit')
+            ->where('registration.user_type', PieceAFournir::TYPE_SOCIETE)
+            ->where('registration.email', $registration->email)
+            ->where('registration.idpays', $pays->id)
+            ->where('registration.raison_sociale', 'Acme Transport')
+            ->where('registration.representant_nom', 'Doe')
+            ->where('registration.representant_prenom', 'Jane')
+            ->has('registration.documents')
+            ->has('pays')
+            ->has('pieces'));
+    }
+
+    public function test_rejected_registration_can_update_email_and_password(): void
+    {
+        Notification::fake();
+
+        $registration = $this->createRejectedRegistration();
+        $pays = $this->createPays();
+        $registration->transporteur->user->forceFill(['email_verified_at' => now()])->save();
+        $oldVerifiedAt = $registration->transporteur->user->fresh()->email_verified_at;
+
+        $response = $this->post(route('registration.update', $registration->numero_dossier), [
+            'current_email' => $registration->email,
+            'user_type' => 'societe',
+            'idpays' => $pays->id,
+            'raison_sociale' => 'Acme Transport',
+            'nif' => 'TG1000123456',
+            'rccm' => 'TG-LOM 2024 B 1234',
+            'representant_nom' => 'Doe',
+            'representant_prenom' => 'Jane',
+            'fonction_representant' => 'Gérante',
+            'telephone' => '+228 91 00 00 00',
+            'adresse' => 'Lomé',
+            'ville' => 'Lomé',
+            'nombre_camions' => 8,
+            'email' => 'nouveau@example.com',
+            'password' => 'NouveauPass1!Long',
+            'password_confirmation' => 'NouveauPass1!Long',
+        ]);
+
+        $response->assertRedirect(route('registration.status.search', [
+            'email' => 'nouveau@example.com',
+            'numero_dossier' => $registration->numero_dossier,
+        ]));
+
+        $registration->refresh();
+        $transporteur = Transporteur::where('email', 'nouveau@example.com')->firstOrFail();
+        $user = User::where('email', 'nouveau@example.com')->firstOrFail();
+
+        $this->assertSame('nouveau@example.com', $registration->email);
+        $this->assertSame('nouveau@example.com', $transporteur->email);
+        $this->assertSame('nouveau@example.com', $user->email);
+        $this->assertTrue(Hash::check('NouveauPass1!Long', $user->password));
+        $this->assertNotNull($user->email_verified_at);
+        $this->assertSame(
+            $oldVerifiedAt?->toDateTimeString(),
+            $user->email_verified_at?->toDateTimeString(),
+        );
+    }
+
+    public function test_rejected_registration_type_cannot_be_changed(): void
+    {
+        $registration = $this->createRejectedRegistration();
+        $pays = $this->createPays();
+
+        $response = $this->post(route('registration.update', $registration->numero_dossier), [
+            'current_email' => $registration->email,
+            'user_type' => 'particulier',
+            'idpays' => $pays->id,
+            'nom' => 'Doe',
+            'prenom' => 'Jane',
+            'numero_piece_identite' => 'CNI12345',
+            'telephone' => '+228 91 00 00 00',
+        ]);
+
+        $response->assertSessionHasErrors('user_type');
+        $this->assertSame(Inscription::STATUS_REJECTED, $registration->fresh()->statut);
+    }
+
+    public function test_rejected_transitaire_registration_can_be_updated(): void
+    {
+        Notification::fake();
+
+        $transitaire = Transitaire::create([
+            'email' => 'transitaire@example.com',
+            'nom' => 'Doe',
+            'prenom' => 'Jane',
+            'raisonsociale' => 'Acme Transit',
+            'nif' => 'TG1000123456',
+            'rccm' => 'TG-LOM 2024 B 1234',
+            'fonction_representant' => 'Gérante',
+            'telephone' => '+228 90 00 00 00',
+            'adresse' => 'Lomé',
+            'ville' => 'Lomé',
+            'nombre_camions' => 3,
+            'statut' => Transitaire::STATUS_REJECTED,
+        ]);
+
+        $registration = Inscription::create([
+            'email' => 'transitaire@example.com',
+            'statut' => Inscription::STATUS_REJECTED,
+            'token' => 'token-transitaire',
+            'idtransitaire' => $transitaire->id,
+        ]);
+
+        User::create([
+            'name' => 'Acme Transit',
+            'email' => 'transitaire@example.com',
+            'password' => 'Password1!',
+            'statut' => User::STATUS_REJECTED,
+            'idtransitaire' => $transitaire->id,
+        ]);
+
+        $pays = $this->createPays();
+
+        $editResponse = $this->get(route('registration.edit', [
+            'numeroDossier' => $registration->numero_dossier,
+            'email' => $registration->email,
+        ]));
+
+        $editResponse->assertOk()->assertInertia(fn (Assert $page) => $page
+            ->component('Registration/Edit')
+            ->where('registration.user_type', PieceAFournir::TYPE_TRANSITAIRE)
+            ->where('registration.raison_sociale', 'Acme Transit')
+            ->where('registration.representant_nom', 'Doe')
+            ->where('registration.representant_prenom', 'Jane')
+            ->where('registration.nom', null));
+
+        $response = $this->post(route('registration.update', $registration->numero_dossier), [
+            'current_email' => $registration->email,
+            'user_type' => 'transitaire',
+            'idpays' => $pays->id,
+            'raison_sociale' => 'Acme Transit Corrigé',
+            'nif' => 'TG1000123456',
+            'rccm' => 'TG-LOM 2024 B 1234',
+            'representant_nom' => 'Doe',
+            'representant_prenom' => 'Jane',
+            'fonction_representant' => 'Gérante',
+            'telephone' => '+228 91 00 00 00',
+            'adresse' => 'Lomé',
+            'ville' => 'Lomé',
+            'nombre_camions' => 4,
+        ]);
+
+        $response->assertRedirect(route('registration.status.search', [
+            'email' => $registration->email,
+            'numero_dossier' => $registration->numero_dossier,
+        ]));
+
+        $registration->refresh();
+        $this->assertSame(Inscription::STATUS_PENDING, $registration->statut);
+        $this->assertSame('Acme Transit Corrigé', $registration->transitaire->raisonsociale);
+        $this->assertSame(4, $registration->transitaire->nombre_camions);
+        $this->assertSame('pending', $registration->transitaire->user->statut);
     }
 
     public function test_registration_status_can_be_found_with_exact_email_and_numero_dossier(): void
@@ -423,6 +614,7 @@ class RegistrationWorkflowTest extends TestCase
             'idpays' => $pays->id,
             'nom' => 'ATSU',
             'prenom' => 'Komla',
+            'numero_piece_identite' => 'CNI 1234 5678',
             'telephone' => '+228 91 00 00 00',
             'adresse' => 'Kpalimé',
             'email' => 'komla@example.com',
@@ -436,6 +628,32 @@ class RegistrationWorkflowTest extends TestCase
         $this->assertNull($user->idtransitaire);
         $this->assertTrue($user->hasRole('transporteur'));
         $this->assertFalse($user->hasRole('transitaire'));
+        $this->assertDatabaseHas('transporteur', [
+            'email' => 'komla@example.com',
+            'numero_piece_identite' => 'CNI 1234 5678',
+        ]);
+    }
+
+    public function test_particulier_registration_requires_an_identity_document_number(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+
+        $pays = $this->createPays();
+
+        $this->post('/register', [
+            'user_type' => 'particulier',
+            'idpays' => $pays->id,
+            'nom' => 'ATSU',
+            'prenom' => 'Komla',
+            'telephone' => '+228 91 00 00 00',
+            'adresse' => 'Kpalimé',
+            'email' => 'komla-sans-piece@example.com',
+            'password' => 'Password1!Long',
+            'password_confirmation' => 'Password1!Long',
+        ])->assertSessionHasErrors('numero_piece_identite');
+
+        $this->assertDatabaseMissing('users', ['email' => 'komla-sans-piece@example.com']);
     }
 
     public function test_admin_can_approve_a_transitaire_registration(): void

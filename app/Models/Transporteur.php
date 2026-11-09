@@ -29,6 +29,7 @@ class Transporteur extends Model
         'typetransporteur',
         'nif',
         'rccm',
+        'numero_piece_identite',
         'fonction_representant',
         'telephone',
         'adresse',
