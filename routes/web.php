@@ -97,6 +97,7 @@ Route::middleware(['auth', 'verified', 'transporteur'])
         Route::get('/demandes', [DemandeRdvController::class, 'index'])->name('demandes.index');
         Route::get('/demandes/nouvelle', [DemandeRdvController::class, 'create'])->name('demandes.create');
         Route::post('/demandes', [DemandeRdvController::class, 'store'])->name('demandes.store');
+        Route::get('/demandes/{demande}', [DemandeRdvController::class, 'show'])->name('demandes.show');
         Route::get('/demandes/{demande}/envoyee', [DemandeRdvController::class, 'sent'])->name('demandes.sent');
         Route::get('/demandes/{demande}/modifier', [DemandeRdvController::class, 'edit'])->name('demandes.edit');
         Route::put('/demandes/{demande}', [DemandeRdvController::class, 'update'])->name('demandes.update');

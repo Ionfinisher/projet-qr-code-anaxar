@@ -113,6 +113,22 @@ class DemandeRdvController extends Controller
         ]);
     }
 
+    public function show(Request $request, DemandeRdv $demande): Response
+    {
+        $this->authorize('view', $demande);
+
+        $demande->load(['creneau', 'camions', 'documents', 'evenements.actor', 'decideur', 'user']);
+
+        return Inertia::render('Transporteur/Demandes/Show', [
+            'demande' => DemandeRdvPresenter::detail(
+                $demande,
+                $request->user(),
+                $this->usage->forCreneau($demande->creneau)
+            ),
+            'me' => TransporteurPresenter::me($request->user()),
+        ]);
+    }
+
     public function create(Request $request): Response
     {
         $user = $request->user();
