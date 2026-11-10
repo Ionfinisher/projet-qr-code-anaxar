@@ -258,6 +258,23 @@ class DemandeRdvTest extends TestCase
             );
     }
 
+    public function test_transporteur_can_view_a_demande_detail_page(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot();
+        $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
+        DemandeCamion::factory()->forDemande($demande)->create();
+
+        $this->actingAs($user)
+            ->get(route('transporteur.demandes.show', $demande))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Transporteur/Demandes/Show')
+                ->where('demande.reference', $demande->reference)
+                ->has('demande.trucks', 1)
+            );
+    }
+
     public function test_transporteur_can_create_a_demande_with_documents(): void
     {
         $user = $this->transporteur();

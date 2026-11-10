@@ -1,7 +1,17 @@
-import { Alert, Badge, Card, KeyValue, Meter, SectionTitle, Button } from '@/Components/ui';
+import { Alert, Badge, Card, KeyValue, Meter, SectionTitle, Button, DataTable } from '@/Components/ui';
 import { router } from '@inertiajs/react';
 import { Icon } from '@/Components/ui/Icon';
-import { DOCS, fmtDateTime, fmtDayLong, fmtInt, formatPhone } from '@/Lib/domain';
+import { ContainerNumber, Plate } from '@/Components/domain';
+import {
+    DOCS,
+    driverName,
+    fmtDateTime,
+    fmtDayLong,
+    fmtInt,
+    formatPhone,
+    licenseValid,
+    parseContainer,
+} from '@/Lib/domain';
 import { EVENT_META, opLabel, statusMeta, terminalLabel } from './status';
 import { fmtSize } from './helpers';
 
@@ -10,35 +20,6 @@ const slotLabel = (slot) => `${fmtDayLong(`${slot.date}T12:00:00Z`)} · ${slot.s
 function StatusBadge({ status }) {
     const meta = statusMeta(status);
     return <Badge tone={meta.tone} icon={meta.icon}>{meta.label}</Badge>;
-}
-
-function TruckCard({ truck }) {
-    const { driver, vehicle, container } = truck;
-
-    return (
-        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-slate-900">
-                    Camion {truck.position}
-                </p>
-                <Badge tone="neutral" size="sm" icon="truck">{vehicle.country}</Badge>
-            </div>
-            <KeyValue
-                dense
-                items={[
-                    ['Chauffeur', `${driver.first} ${driver.last}`],
-                    ['Téléphone', formatPhone(driver.phone)],
-                    ['Permis', driver.license],
-                    ['Tracteur', vehicle.tractor],
-                    vehicle.trailer ? ['Remorque', vehicle.trailer] : null,
-                    container.number ? ['Conteneur', `${container.number} · ${container.iso}`] : ['Conteneur', 'Vide (MTP)'],
-                    container.bl ? ['Connaissement', container.bl] : null,
-                    container.goods ? ['Marchandise', container.goods] : null,
-                    container.vgm ? ['VGM', `${fmtInt(container.vgm)} kg`] : null,
-                ]}
-            />
-        </div>
-    );
 }
 
 export default function DemandeDetail({ demande, actions = null }) {
@@ -127,8 +108,89 @@ export default function DemandeDetail({ demande, actions = null }) {
                 <SectionTitle icon="truck" aside={<Badge tone="neutral">{demande.trucks.length} camion{demande.trucks.length > 1 ? 's' : ''}</Badge>}>
                     Camions
                 </SectionTitle>
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {demande.trucks.map((truck) => <TruckCard key={truck.id} truck={truck} />)}
+                <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+                    <DataTable
+                        rows={demande.trucks}
+                        caption={`Camions de la demande ${demande.reference}`}
+                        columns={[
+                            {
+                                key: 'ctr',
+                                header: 'Conteneur',
+                                render: (truck) => {
+                                    const number = truck.container?.number;
+                                    const parsed = parseContainer(number);
+
+                                    return (
+                                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                            <ContainerNumber value={number} size="sm" placeholder="Vide" />
+                                            {number ? (
+                                                <Icon
+                                                    name={parsed.valid ? 'circle-check' : 'circle-x'}
+                                                    size={15}
+                                                    className={parsed.valid ? 'text-emerald-600' : 'text-rose-600'}
+                                                    label={parsed.valid ? 'ISO 6346 valide' : 'ISO 6346 invalide'}
+                                                />
+                                            ) : null}
+                                        </span>
+                                    );
+                                },
+                            },
+                            {
+                                key: 'iso',
+                                header: 'Type ISO',
+                                render: (truck) => (
+                                    <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-slate-700">
+                                        {truck.container?.iso || '—'}
+                                    </span>
+                                ),
+                            },
+                            {
+                                key: 'bl',
+                                header: 'Connaissement',
+                                className: 'font-mono text-[13px]',
+                                render: (truck) => truck.container?.bl || '—',
+                            },
+                            {
+                                key: 'veh',
+                                header: 'Tracteur',
+                                render: (truck) => (
+                                    <Plate
+                                        country={truck.vehicle?.country || 'TG'}
+                                        value={truck.vehicle?.tractor}
+                                        size="sm"
+                                    />
+                                ),
+                            },
+                            {
+                                key: 'drv',
+                                header: 'Chauffeur',
+                                render: (truck) => (
+                                    <>
+                                        <span className="font-medium text-slate-900">
+                                            {driverName(truck.driver)}
+                                        </span>
+                                        <span className="block text-xs tabular-nums text-slate-500">
+                                            {formatPhone(truck.driver?.phone)}
+                                        </span>
+                                    </>
+                                ),
+                            },
+                            {
+                                key: 'lic',
+                                header: 'Permis',
+                                render: (truck) =>
+                                    licenseValid(truck.driver?.license) ? (
+                                        <span className="font-mono text-[13px] text-slate-700">
+                                            {truck.driver.license}
+                                        </span>
+                                    ) : (
+                                        <Badge tone="bad" icon="triangle-alert">
+                                            Manquant
+                                        </Badge>
+                                    ),
+                            },
+                        ]}
+                    />
                 </div>
             </Card>
 

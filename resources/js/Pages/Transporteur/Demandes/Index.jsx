@@ -4,7 +4,6 @@ import { TransporteurLayout } from '@/Layouts/TransporteurLayout';
 import {
     Badge,
     Button,
-    Drawer,
     EmptyState,
     PageHeader,
     SearchInput,
@@ -12,12 +11,14 @@ import {
 } from '@/Components/ui';
 import { cn } from '@/Lib/cn';
 import { fmtAgo, fmtDateTime, fmtDayNum, fmtInt } from '@/Lib/domain';
-import DemandeDetail from './DemandeDetail';
 import CancelDialog from './CancelDialog';
+import DemandeActions from './DemandeActions';
+import DemandeDetail from './DemandeDetail';
 import { opLabel, statusMeta, terminalLabel } from './status';
 
 const TABS = [
     { key: 'all', label: 'Toutes' },
+    { key: 'en_attente', label: 'En attente' },
     { key: 'validee', label: 'Validées' },
     { key: 'rejetee', label: 'Rejetées' },
     { key: 'annulee', label: 'Annulées' },
@@ -81,7 +82,6 @@ function DemandeRow({ d, now, current, onClick }) {
 export default function Index({ demandes, counts, filters, selected }) {
     const [query, setQuery] = useState(filters.q || '');
     const [cancelTarget, setCancelTarget] = useState(null);
-    const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
     const now = Date.now();
 
     // Debounced search input
@@ -108,19 +108,20 @@ export default function Index({ demandes, counts, filters, selected }) {
         return demandes.data[0]?.reference || selected?.reference || null;
     }, [filters.demande, selected, demandes.data]);
 
-    const handleSelectDemande = (reference, openMobile = true) => {
-        if (openMobile) {
-            setMobileDrawerOpen(true);
+    const handleSelectDemande = (reference) => {
+        const isDesktop = typeof window !== 'undefined'
+            && window.matchMedia('(min-width: 1024px)').matches;
+
+        if (!isDesktop) {
+            router.get(route('transporteur.demandes.show', reference));
+            return;
         }
+
         router.get(
             route('transporteur.demandes.index'),
             { status: filters.status, q: filters.q || undefined, demande: reference },
             { preserveState: true, preserveScroll: true, replace: true },
         );
-    };
-
-    const handleCloseDrawer = () => {
-        setMobileDrawerOpen(false);
     };
 
     const activeDemande = useMemo(() => {
@@ -129,31 +130,6 @@ export default function Index({ demandes, counts, filters, selected }) {
         }
         return null;
     }, [selected, activeRef]);
-
-    const detailActions = activeDemande ? (
-        <div className="flex flex-wrap items-center gap-2">
-            {activeDemande.can_modify ? (
-                <Button
-                    variant="secondary"
-                    size="sm"
-                    icon="pencil"
-                    onClick={() => router.get(route('transporteur.demandes.edit', activeDemande.reference))}
-                >
-                    Modifier
-                </Button>
-            ) : null}
-            {activeDemande.can_cancel ? (
-                <Button
-                    variant="danger-outline"
-                    size="sm"
-                    icon="calendar-x"
-                    onClick={() => setCancelTarget(activeDemande.reference)}
-                >
-                    Annuler
-                </Button>
-            ) : null}
-        </div>
-    ) : null;
 
     return (
         <TransporteurLayout inertia>
@@ -229,7 +205,7 @@ export default function Index({ demandes, counts, filters, selected }) {
                                 d={d}
                                 now={now}
                                 current={d.reference === activeRef}
-                                onClick={() => handleSelectDemande(d.reference, true)}
+                                onClick={() => handleSelectDemande(d.reference)}
                             />
                         ))}
 
@@ -267,7 +243,15 @@ export default function Index({ demandes, counts, filters, selected }) {
                     {/* Colonne de droite (Desktop) : Détail complet sticky */}
                     <div className="hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
                         {activeDemande ? (
-                            <DemandeDetail demande={activeDemande} actions={detailActions} />
+                            <DemandeDetail
+                                demande={activeDemande}
+                                actions={(
+                                    <DemandeActions
+                                        demande={activeDemande}
+                                        onCancel={() => setCancelTarget(activeDemande.reference)}
+                                    />
+                                )}
+                            />
                         ) : (
                             <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
                                 Sélectionnez une demande dans la liste pour afficher ses détails, ses camions et ses documents.
@@ -276,36 +260,6 @@ export default function Index({ demandes, counts, filters, selected }) {
                     </div>
                 </div>
             )}
-
-            {/* Tiroir coulissant latéral pour affichage mobile (< lg) */}
-            <Drawer
-                open={mobileDrawerOpen && Boolean(activeDemande)}
-                onClose={handleCloseDrawer}
-                title={activeDemande ? `Demande ${activeDemande.reference}` : 'Détail de la demande'}
-                description={activeDemande ? `${opLabel(activeDemande.operation)} · ${terminalLabel(activeDemande.terminal)}` : undefined}
-                size="lg"
-                footer={activeDemande ? (
-                    <>
-                        <Button variant="secondary" onClick={handleCloseDrawer}>Fermer</Button>
-                        {activeDemande.can_modify ? (
-                            <Button
-                                variant="secondary"
-                                icon="pencil"
-                                onClick={() => router.get(route('transporteur.demandes.edit', activeDemande.reference))}
-                            >
-                                Modifier
-                            </Button>
-                        ) : null}
-                        {activeDemande.can_cancel ? (
-                            <Button variant="danger-outline" icon="calendar-x" onClick={() => setCancelTarget(activeDemande.reference)}>
-                                Annuler
-                            </Button>
-                        ) : null}
-                    </>
-                ) : null}
-            >
-                {activeDemande ? <DemandeDetail demande={activeDemande} /> : null}
-            </Drawer>
 
             {cancelTarget ? (
                 <CancelDialog key={cancelTarget} reference={cancelTarget} onClose={() => setCancelTarget(null)} />
