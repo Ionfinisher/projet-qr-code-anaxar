@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\PlaceAutocompleteController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -17,3 +18,12 @@ use Illuminate\Support\Facades\Route;
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+// Autocomplete (proxy serveur vers Google Places, clé jamais exposée).
+Route::get('/places/cities', [PlaceAutocompleteController::class, 'cities'])
+    ->middleware('throttle:places')
+    ->name('places.cities');
+
+Route::get('/places/addresses', [PlaceAutocompleteController::class, 'addresses'])
+    ->middleware('throttle:places')
+    ->name('places.addresses');
