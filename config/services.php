@@ -31,4 +31,23 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Google Places (Autocomplete des villes)
+    |--------------------------------------------------------------------------
+    |
+    | La clé reste côté serveur : elle n'est jamais exposée au navigateur.
+    | Activer « Places API (New) » dans le projet Google Cloud associé.
+    |
+    */
+
+    'google_places' => [
+        'key' => env('GOOGLE_PLACES_API_KEY'),
+        'endpoint' => env(
+            'GOOGLE_PLACES_ENDPOINT',
+            'https://places.googleapis.com/v1/places:autocomplete'
+        ),
+        'timeout' => (int) env('GOOGLE_PLACES_TIMEOUT', 5),
+    ],
+
 ];
