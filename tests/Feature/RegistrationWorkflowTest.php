@@ -203,6 +203,36 @@ class RegistrationWorkflowTest extends TestCase
                 ->has('registrations.data', 0));
     }
 
+    public function test_admin_can_preview_pdf_registration_documents_inline(): void
+    {
+        Storage::fake('local');
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $registration = $this->createRejectedRegistration();
+        $registration->transporteur->user->update(['email_verified_at' => now()]);
+        $path = UploadedFile::fake()->create('cfe.pdf', 100, 'application/pdf')
+            ->store('registrations/'.$registration->id, 'local');
+        $piece = PieceInscription::create([
+            'piece' => $path,
+            'statut' => Inscription::STATUS_PENDING,
+            'idpieceafournir' => $this->createPiece()->id,
+            'idinscription' => $registration->id,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.registrations.documents.preview', $piece))
+            ->assertOk()
+            ->assertHeader('Content-Disposition', 'inline; filename="'.basename($path).'"');
+    }
+
     public function test_registration_rejects_an_invalid_document_type(): void
     {
         Storage::fake('local');

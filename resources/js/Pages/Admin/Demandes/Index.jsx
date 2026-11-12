@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Head, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { PageHeader, SearchInput } from '@/Components/ui/Navigation';
@@ -79,8 +79,7 @@ export default function Index({ auth, demandes = [], counts = {}, filters = {}, 
             const trucks = (d.trucks || [])
                 .map(
                     (t) =>
-                        `${t.container?.number || ''} ${t.vehicle?.tractor || ''} ${t.container?.bl || ''} ${
-                            t.driver?.first || ''
+                        `${t.container?.number || ''} ${t.vehicle?.tractor || ''} ${t.container?.bl || ''} ${t.driver?.first || ''
                         } ${t.driver?.last || ''}`
                 )
                 .join(' ');
@@ -94,6 +93,12 @@ export default function Index({ auth, demandes = [], counts = {}, filters = {}, 
         if (selected && selected.reference === selectedId) return selected;
         return demandes.find((d) => d.reference === selectedId) || selected || null;
     }, [demandes, selectedId, selected]);
+
+    useEffect(() => {
+        if (!filteredList.some((item) => item.id === selectedId)) setSelectedId(filteredList[0]?.id || null);
+    }, [filteredList, selectedId]);
+
+    selected = filteredList.find((item) => item.id === selectedId) || null;
 
     const handleSelectDemande = (d) => {
         setSelectedId(d.reference);
@@ -177,66 +182,83 @@ export default function Index({ auth, demandes = [], counts = {}, filters = {}, 
                             : 'Il n’y a aucune demande correspondant à ce filtre.'}
                     </EmptyState>
                 ) : (
-                    <div className="flex flex-col gap-2.5">
-                        {filteredList.map((d) => {
-                            const trucksCount = d.trucks_count || d.trucks?.length || 1;
-                            const slotStart = d.slot?.start || '—';
-                            const slotDate = d.slot?.date;
-                            const relDate = slotDate
-                                ? relDay(slotDate, today).replace('Aujourd’hui', 'Auj.')
-                                : '—';
-                            const title =
-                                d.owner?.company ||
-                                (d.owner ? accountName(d.owner) : null) ||
-                                'Transporteur';
-                            const opShort = OPS[d.operation || d.op]?.short || d.operation || '';
-                            const termShort = TERMINALS[d.terminal]?.short || d.terminal || '';
+                    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(19rem,0.8fr)_minmax(0,1.5fr)]">
+                        {/* Colonne de gauche : liste des demandes de rendez-vous */}
+                        <div className="flex flex-col gap-2.5">
+                            {filteredList.map((d) => {
+                                const trucksCount = d.trucks_count || d.trucks?.length || 1;
+                                const slotStart = d.slot?.start || '—';
+                                const slotDate = d.slot?.date;
+                                const relDate = slotDate
+                                    ? relDay(slotDate, today).replace('Aujourd’hui', 'Auj.')
+                                    : '—';
+                                const title =
+                                    d.owner?.company ||
+                                    (d.owner ? accountName(d.owner) : null) ||
+                                    'Transporteur';
+                                const opShort = OPS[d.operation || d.op]?.short || d.operation || '';
+                                const termShort = TERMINALS[d.terminal]?.short || d.terminal || '';
 
-                            return (
-                                <RecordRow
-                                    key={d.reference}
-                                    active={d.reference === selectedId}
-                                    onClick={() => handleSelectDemande(d)}
-                                    leading={
-                                        <>
-                                            <strong className="text-sm font-bold tabular-nums text-slate-900">
-                                                {slotStart}
-                                            </strong>
-                                            <span className="text-[11px] text-slate-500">
-                                                {relDate}
-                                            </span>
-                                        </>
-                                    }
-                                    title={title}
-                                    line2={
-                                        <>
-                                            <span className="font-mono font-medium text-slate-900">
-                                                {d.reference}
-                                            </span>{' '}
-                                            · {trucksCount} camion{trucksCount > 1 ? 's' : ''} ·{' '}
-                                            {opShort} · {termShort}
-                                        </>
-                                    }
-                                    line3={
-                                        d.status === 'en_attente'
-                                            ? `Soumise ${fmtAgo(d.submitted_at || d.submittedAt, now)}`
-                                            : `Mise à jour ${fmtAgo(d.updated_at || d.updatedAt, now)}`
-                                    }
-                                    side={
-                                        d.status === 'en_attente' ? (
-                                            <UrgencyBadge demande={d} now={now} />
-                                        ) : (
-                                            <StatusTag map={DEM_STATUS} status={d.status} short />
-                                        )
-                                    }
+                                return (
+                                    <RecordRow
+                                        key={d.reference}
+                                        active={d.reference === selectedId}
+                                        onClick={() => handleSelectDemande(d)}
+                                        leading={
+                                            <>
+                                                <strong className="text-sm font-bold tabular-nums text-slate-900">
+                                                    {slotStart}
+                                                </strong>
+                                                <span className="text-[11px] text-slate-500">
+                                                    {relDate}
+                                                </span>
+                                            </>
+                                        }
+                                        title={title}
+                                        line2={
+                                            <>
+                                                <span className="font-mono font-medium text-slate-900">
+                                                    {d.reference}
+                                                </span>{' '}
+                                                · {trucksCount} camion{trucksCount > 1 ? 's' : ''} ·{' '}
+                                                {opShort} · {termShort}
+                                            </>
+                                        }
+                                        line3={
+                                            d.status === 'en_attente'
+                                                ? `Soumise ${fmtAgo(d.submitted_at || d.submittedAt, now)}`
+                                                : `Mise à jour ${fmtAgo(d.updated_at || d.updatedAt, now)}`
+                                        }
+                                        side={
+                                            d.status === 'en_attente' ? (
+                                                <UrgencyBadge demande={d} now={now} />
+                                            ) : (
+                                                <StatusTag map={DEM_STATUS} status={d.status} short />
+                                            )
+                                        }
+                                    />
+                                );
+                            })}
+                        </div>
+                        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:sticky lg:top-6">
+                            {activeDemande ? (
+                                <DemandeAdminDetail
+                                    key={activeDemande.reference}
+                                    demande={activeDemande}
+                                    now={now}
+                                    onClose={handleCloseDrawer}
                                 />
-                            );
-                        })}
+                            ) : (
+                                <EmptyState icon="file-search" title="Demande introuvable">
+                                    Cette demande n’existe pas ou n’est plus accessible.
+                                </EmptyState>
+                            )}
+                        </div>
                     </div>
                 )}
 
                 {/* Slide-over Drawer pour le détail de la demande */}
-                <Drawer
+                {/* <Drawer
                     open={!!selectedId}
                     onClose={handleCloseDrawer}
                     title={activeDemande ? `Demande ${activeDemande.reference}` : 'Demande de rendez-vous'}
@@ -259,7 +281,7 @@ export default function Index({ auth, demandes = [], counts = {}, filters = {}, 
                             Cette demande n’existe pas ou n’est plus accessible.
                         </EmptyState>
                     )}
-                </Drawer>
+                </Drawer> */}
             </div>
         </AuthenticatedLayout>
     );

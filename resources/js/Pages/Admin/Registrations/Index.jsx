@@ -6,7 +6,7 @@ import { Segmented } from '@/Components/ui/Choice';
 import { Badge } from '@/Components/ui/Badge';
 import { Button, buttonClass } from '@/Components/ui/Button';
 import { EmptyState, Alert } from '@/Components/ui/Feedback';
-import { Drawer } from '@/Components/ui/index.js';
+import { Drawer, Modal } from '@/Components/ui/index.js';
 import { KeyValue } from '@/Components/ui/Data.jsx';
 import { Card, SectionTitle } from '@/Components/ui/Card.jsx';
 import { formatPhone, fmtDateTime, fmtAgo } from '@/Lib/domain.js';
@@ -75,6 +75,7 @@ const REJECT_REASONS = [
 function RegistrationDetail({ registration }) {
     const [busy, setBusy] = useState(false);
     const [actionNotice, setActionNotice] = useState(null);
+    const [preview, setPreview] = useState(null);
     const config = STATUS_MAP[registration.status] || { label: registration.status, tone: 'neutral', icon: 'file-text' };
     const canAct = ['pending', 'complements_requested'].includes(registration.status);
     const entity = registration.entity || {};
@@ -215,6 +216,7 @@ function RegistrationDetail({ registration }) {
                             <li key={document.id} className="flex items-center gap-3 p-3">
                                 <Icon name="file-check" size={18} className="text-emerald-600" />
                                 <span className="min-w-0 flex-1 text-sm text-slate-900">{document.label}<span className="ml-2 text-xs text-slate-500">{document.filename}</span></span>
+                                {document.preview_url && ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(document.mime_type) && <Button variant="ghost" size="sm" icon="eye" onClick={() => setPreview(document)}>Voir</Button>}
                                 {document.download_url && <a href={document.download_url} className={buttonClass({ variant: 'ghost', size: 'sm' })}>Télécharger</a>}
                             </li>
                         ))}
@@ -225,6 +227,13 @@ function RegistrationDetail({ registration }) {
                 <SectionTitle icon="history">Historique</SectionTitle>
                 <HistoryTimeline items={ins.history || []} />
               </Card> */}
+            <Modal open={!!preview} onClose={() => setPreview(null)} title={preview?.label || 'Aperçu du document'} description={preview?.filename} size="xl" bodyClassName="bg-slate-100">
+                {preview?.mime_type === 'application/pdf' ? (
+                    <iframe title={preview.filename} src={preview.preview_url} className="h-[70vh] w-full rounded-xl border border-slate-200 bg-white" />
+                ) : (
+                    <img src={preview?.preview_url} alt={preview?.label || preview?.filename} className="mx-auto max-h-[70vh] max-w-full rounded-xl object-contain shadow-sm" />
+                )}
+            </Modal>
         </div>
     );
 }

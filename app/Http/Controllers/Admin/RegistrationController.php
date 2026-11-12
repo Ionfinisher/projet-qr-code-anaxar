@@ -46,6 +46,12 @@ class RegistrationController extends Controller
                             'id' => $piece->id,
                             'label' => $piece->pieceafournir?->libelle ?? 'Pièce justificative',
                             'filename' => basename((string) $piece->piece),
+                            'mime_type' => $piece->piece && Storage::disk('local')->exists($piece->piece)
+                                ? Storage::disk('local')->mimeType($piece->piece)
+                                : null,
+                            'preview_url' => $piece->piece
+                                ? route('admin.registrations.documents.preview', $piece->getKey())
+                                : null,
                             'download_url' => $piece->piece ? route('admin.registrations.documents.download', $piece->getKey()) : null,
                         ])->values()->all(),
                     ];
@@ -172,5 +178,25 @@ class RegistrationController extends Controller
         $filename = trim(($pieceInscription->pieceafournir?->libelle ?? 'document') . ($extension ? '.' . $extension : ''));
 
         return Storage::disk('local')->download($pieceInscription->piece, $filename);
+    }
+
+    public function preview(string $piece): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        abort_unless(auth()->user()?->isAdmin(), 403);
+
+        $pieceInscription = ctype_digit($piece)
+            ? PieceInscription::query()->whereKey((int) $piece)->firstOrFail()
+            : PieceInscription::query()->where('keypieceinscription', $piece)->firstOrFail();
+
+        abort_unless($pieceInscription->piece && Storage::disk('local')->exists($pieceInscription->piece), 404);
+
+        $path = Storage::disk('local')->path($pieceInscription->piece);
+        $mimeType = Storage::disk('local')->mimeType($pieceInscription->piece);
+        abort_unless(in_array($mimeType, ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp'], true), 415);
+
+        return response()->file($path, [
+            'Content-Type' => $mimeType,
+            'Content-Disposition' => 'inline; filename="'.addslashes(basename($path)).'"',
+        ]);
     }
 }
