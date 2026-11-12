@@ -11,6 +11,9 @@ import { Alert } from '@/Components/ui/Feedback';
 import { Icon } from '@/Components/ui/Icon';
 import { cn } from '@/Lib/cn';
 import { emailValid } from '@/Lib/domain';
+import {
+    Field, Input, Select, RadioCards, PasswordInput, PasswordRules, Checkbox, KeyValue, Alert, Badge, Button, Icon,
+} from '@/Components/ui/index.js';
 
 const STEPS = [
     { label: 'Identité', sub: 'Type d’activité et coordonnées' },
@@ -68,12 +71,63 @@ function formFromRegistration(registration) {
     };
 }
 
+function ReviewCard({ icon, title, onEdit, children }) {
+    return (
+        <div className="rounded-2xl border border-slate-200 p-4">
+            <header className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-900"><Icon name={icon} size={16} className="text-slate-500" /> {title}</h4>
+                <Button size="sm" variant="ghost" icon="pencil" onClick={onEdit}>Modifier</Button>
+            </header>
+            {children}
+        </div>
+    );
+}
+
+function StepReview({ data, selectedCountry, selectedPhoneCountry, availablePieces, existingDocuments, editing, goTo, error }) {
+    return (
+        <div className="flex flex-col gap-4">
+            <ReviewCard icon='' title={data.user_type === 'transitaire'
+                ? 'Transitaire · commissionnaire en douane'
+                : data.user_type === 'societe'
+                    ? 'Entreprise de transport'
+                    : 'Transporteur particulier'} onEdit={() => goTo(0)}>
+                <KeyValue dense items={data.user_type === 'particulier'
+                    ? [['Nom', `${data.prenom} ${data.nom.toUpperCase()}`], ['Pièce d’identité', data.numero_piece_identite.trim()], ['Ville', `${data.ville.trim()} · ${selectedCountry?.nom}`]]
+                    : [['Raison sociale', data.raison_sociale], ['NIF', data.nif], ['RCCM', data.rccm], ['Adresse', `${data.adresse}, ${data.ville} · ${selectedCountry?.nom}`], ['Représentant', `${data.representant_prenom} ${!data.representant_nom.toUpperCase()} · ${data.fonction_representant}`]]} />
+            </ReviewCard>
+            <ReviewCard icon="at-sign" title="Contact et accès" onEdit={() => goTo(1)}>
+                <KeyValue dense items={[data.email ? ['E-mail', data.email] : null, ['Téléphone', `${selectedPhoneCountry.indicatif ? `+${String(selectedPhoneCountry.indicatif).replace(/^\+/, '')} ` : ''} ${data.telephone}`], ['Identifiant', data.email],
+                ['Mot de passe', editing && !data.password ? 'Inchangé' : `Défini · haché PBKDF2 avant enrégistrement`]]} />
+            </ReviewCard>
+            <ReviewCard icon="file-check" title="Documents fournis" onEdit={() => goTo(2)}>
+                <div className="flex flex-wrap gap-1.5">{availablePieces.map((p) => {
+                    const provided = !!data.documents[p.id] || !!existingDocuments[p.id];
+                    return (
+                        <span
+                            key={p.id}
+                            className={cn(
+                                'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs',
+                                provided
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-slate-200 text-slate-600'
+                            )}
+                        >
+                            <Icon name={provided ? 'check' : 'x'} size={12} />
+                            {p.libelle}
+                        </span>
+                    );
+                })}</div>
+            </ReviewCard>
+            {error && <Alert tone="bad" role="alert">{error}</Alert>}
+        </div>
+    );
+}
+
 export default function Register({ pays = [], pieces = [], registration = null }) {
     const editing = !!registration;
     const existingDocuments = registration?.documents ?? {};
     const [step, setStep] = useState(0);
     const [cguAccepted, setCguAccepted] = useState(editing);
-    const [cgaAccepted, setCgaAccepted] = useState(editing);
     const [stepErrors, setStepErrors] = useState({});
     const panelRef = useRef(null);
 
@@ -712,92 +766,7 @@ export default function Register({ pays = [], pieces = [], registration = null }
                     {/* Step 3: Vérification & Envoi */}
                     {step === 3 && (
                         <div className="flex flex-col gap-6">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-                                <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
-                                    Récapitulatif de votre dossier
-                                </h3>
-
-                                <dl className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2 text-sm">
-                                    <div>
-                                        <dt className="text-xs text-slate-500">Type d’activité</dt>
-                                        <dd className="font-semibold text-slate-900">
-                                            {data.user_type === 'transitaire'
-                                                ? 'Transitaire · commissionnaire en douane'
-                                                : data.user_type === 'societe'
-                                                    ? 'Entreprise de transport'
-                                                    : 'Transporteur particulier'}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-slate-500">Nom / Raison sociale</dt>
-                                        <dd className="font-semibold text-slate-900">
-                                            {['societe', 'transitaire'].includes(data.user_type)
-                                                ? data.raison_sociale
-                                                : `${data.nom} ${data.prenom}`.trim()}
-                                        </dd>
-                                    </div>
-                                    {data.user_type === 'particulier' && (
-                                        <div>
-                                            <dt className="text-xs text-slate-500">N° de pièce d’identité</dt>
-                                            <dd className="font-mono text-slate-900">{data.numero_piece_identite || '—'}</dd>
-                                        </div>
-                                    )}
-                                    <div>
-                                        <dt className="text-xs text-slate-500">Pays (Identité)</dt>
-                                        <dd className="font-semibold text-slate-900">
-                                            {selectedCountry?.nom || '—'}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-slate-500">Téléphone de contact</dt>
-                                        <dd className="text-slate-900">
-                                            {selectedPhoneCountry?.indicatif ? `+${String(selectedPhoneCountry.indicatif).replace(/^\+/, '')} ` : ''}{data.telephone}
-                                        </dd>
-                                    </div>
-                                    <div>
-                                        <dt className="text-xs text-slate-500">E-mail de contact</dt>
-                                        <dd className="font-mono text-slate-900">
-                                            {data.email || (editing ? `Inchangé — ${registration.email}` : '—')}
-                                        </dd>
-                                    </div>
-                                    {editing && (
-                                        <div>
-                                            <dt className="text-xs text-slate-500">Mot de passe</dt>
-                                            <dd className="text-slate-900">
-                                                {data.password ? 'Nouveau mot de passe défini' : 'Inchangé'}
-                                            </dd>
-                                        </div>
-                                    )}
-                                    {data.adresse && (
-                                        <div className="sm:col-span-2">
-                                            <dt className="text-xs text-slate-500">Adresse</dt>
-                                            <dd className="text-slate-900">{data.adresse}</dd>
-                                        </div>
-                                    )}
-                                    <div className="sm:col-span-2 border-t border-slate-200 pt-3">
-                                        <dt className="text-xs text-slate-500 mb-1">Documents fournis</dt>
-                                        <dd className="flex flex-wrap gap-2">
-                                            {availablePieces.map((p) => {
-                                                const provided = !!data.documents[p.id] || !!existingDocuments[p.id];
-                                                return (
-                                                    <span
-                                                        key={p.id}
-                                                        className={cn(
-                                                            'inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs',
-                                                            provided
-                                                                ? 'bg-emerald-100 text-emerald-800'
-                                                                : 'bg-slate-200 text-slate-600'
-                                                        )}
-                                                    >
-                                                        <Icon name={provided ? 'check' : 'x'} size={12} />
-                                                        {p.libelle}
-                                                    </span>
-                                                );
-                                            })}
-                                        </dd>
-                                    </div>
-                                </dl>
-                            </div>
+                            <StepReview data={data} existingDocuments={existingDocuments} selectedCountry={selectedCountry} selectedPhoneCountry={selectedPhoneCountry} availablePieces={availablePieces} goTo={goTo} />
 
                             <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 transition-colors hover:bg-slate-50">
                                 <Checkbox
@@ -808,16 +777,6 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                 <span className="text-sm text-slate-700 leading-snug">
                                     J’accepte les Conditions Générales d’Utilisation (CGU) et certifie sur l’honneur l’exactitude de l’ensemble des informations et documents fournis.
                                 </span>
-                            </label>
-                            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 p-4 transition-colors hover:bg-slate-50">
-                                <Checkbox
-                                    checked={cgaAccepted}
-                                    onChange={setCgaAccepted}
-                                    className="mt-0.5"
-                                />
-                                <span className="text-sm text-slate-700 leading-snug">
-                                    J’accepte le traitement de mes données pour l’examen de ma demande et la gestion de mon compte.
-                                    Loi n° 2019-014 du 29 octobre 2019 relative à la protection des données à caractère personnel.                                </span>
                             </label>
                         </div>
                     )}
@@ -852,7 +811,7 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                 icon="send"
                                 type="button"
                                 loading={processing}
-                                disabled={processing || !cguAccepted || !cgaAccepted}
+                                disabled={processing || !cguAccepted}
                                 onClick={submit}
                             >
                                 {processing

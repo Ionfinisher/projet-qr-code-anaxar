@@ -23,10 +23,10 @@ class RegistrationRejected extends Notification implements ShouldQueue
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject('Votre dossier nécessite une correction')
+            ->subject('Votre dossier a été rejeté')
             ->greeting('Bonjour '.$notifiable->name)
-            ->line('Votre dossier '.$this->numeroDossier.' a été rejeté.')
+            ->line('Votre dossier '.$this->numeroDossier.' a été rejeté. Vous devrez créer une nouvelle demande.')
             ->line('Motif : '.$this->reason)
-            ->action('Modifier mon dossier', route('registration.status'));
+            ->action('Suivre mes demandes', route('registration.status'));
     }
 }
