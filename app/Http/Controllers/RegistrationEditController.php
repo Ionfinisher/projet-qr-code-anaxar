@@ -28,7 +28,7 @@ class RegistrationEditController extends Controller
     {
         $request->merge(['email' => Str::lower((string) $request->input('email'))]);
         $validated = $request->validate(['email' => ['required', 'email']]);
-        $inscription = $this->findRejected($validated['email'], $numeroDossier);
+        $inscription = $this->findEditable($validated['email'], $numeroDossier);
         $entity = $inscription->registrationEntity();
         $type = $this->typeFor($entity);
 
@@ -100,7 +100,7 @@ class RegistrationEditController extends Controller
             'email' => $request->filled('email') ? Str::lower((string) $request->input('email')) : null,
         ]);
 
-        $inscription = $this->findRejected((string) $request->input('current_email'), $numeroDossier);
+        $inscription = $this->findEditable((string) $request->input('current_email'), $numeroDossier);
         $entity = $inscription->registrationEntity();
         abort_if($entity === null, 404);
 
@@ -262,12 +262,12 @@ class RegistrationEditController extends Controller
             ->with('success', 'Votre dossier a été resoumis pour validation.');
     }
 
-    private function findRejected(string $email, string $numeroDossier): Inscription
+    private function findEditable(string $email, string $numeroDossier): Inscription
     {
         return Inscription::with(['transporteur.user', 'transitaire.user', 'latestRejection'])
             ->where('email', $email)
             ->where('numero_dossier', $numeroDossier)
-            ->where('statut', Inscription::STATUS_REJECTED)
+            ->where('statut', Inscription::STATUS_COMPLEMENTS_REQUESTED)
             ->firstOrFail();
     }
 

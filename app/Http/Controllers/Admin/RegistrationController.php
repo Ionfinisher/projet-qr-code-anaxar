@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Inscription;
 use App\Models\PieceInscription;
 use App\Notifications\RegistrationApproved;
+use App\Notifications\RegistrationComplementsRequested;
 use App\Notifications\RegistrationRejected;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,11 @@ class RegistrationController extends Controller
     public function index(): Response
     {
         return Inertia::render('Admin/Registrations/Index', [
-            'registrations' => Inscription::with(['transporteur', 'transitaire', 'latestRejection'])
+            'registrations' => Inscription::with(['transporteur', 'transitaire', 'latestRejection', 'pieceinscriptions.pieceafournir'])
+                ->where(function ($query) {
+                    $query->whereHas('transporteur.user', fn ($user) => $user->whereNotNull('email_verified_at'))
+                        ->orWhereHas('transitaire.user', fn ($user) => $user->whereNotNull('email_verified_at'));
+                })
                 ->latest()
                 ->paginate(20)
                 ->through(function (Inscription $registration) {
@@ -30,13 +35,39 @@ class RegistrationController extends Controller
                         'id' => $registration->id,
                         'numero_dossier' => $registration->numero_dossier,
                         'email' => $registration->email,
+                        'phone' => $entity?->telephone,
+                        'submitted_at' => $registration->created_at,
                         'status' => $registration->statut,
                         'name' => $entity?->raisonsociale
-                            ?: trim(($entity?->prenom ?? '').' '.($entity?->nom ?? '')),
+                            ?: trim(($entity?->prenom ?? '') . ' ' . ($entity?->nom ?? '')),
                         'rejection_reason' => $registration->latestRejection?->raison,
+                        'entity' => $this->registrationEntityData($registration),
+                        'documents' => $registration->pieceinscriptions->map(fn(PieceInscription $piece) => [
+                            'id' => $piece->id,
+                            'label' => $piece->pieceafournir?->libelle ?? 'Pièce justificative',
+                            'filename' => basename((string) $piece->piece),
+                            'download_url' => $piece->piece ? route('admin.registrations.documents.download', $piece->getKey()) : null,
+                        ])->values()->all(),
                     ];
                 }),
         ]);
+    }
+
+    private function registrationEntityData(Inscription $registration): array
+    {
+        $entity = $registration->registrationEntity();
+
+        return [
+            'type' => $entity?->typetransporteur ?: ($registration->transitaire ? 'transitaire' : null),
+            'name' => $entity?->raisonsociale ?: trim(($entity?->prenom ?? '') . ' ' . ($entity?->nom ?? '')),
+            'email' => $registration->email,
+            'phone' => $entity?->telephone,
+            'address' => trim(collect([$entity?->adresse, $entity?->ville])->filter()->join(', ')),
+            'nif' => $entity?->nif,
+            'rccm' => $entity?->rccm,
+            'representative' => trim(($entity?->prenom ?? '') . ' ' . ($entity?->nom ?? '')),
+            'trucks' => $entity?->nombre_camions,
+        ];
     }
 
     public function show(Inscription $inscription): Response
@@ -99,6 +130,34 @@ class RegistrationController extends Controller
         return back()->with('success', 'Dossier rejeté.');
     }
 
+    public function requestComplements(Request $request, Inscription $inscription): RedirectResponse
+    {
+        $validated = $request->validate(['raison' => ['required', 'string', 'max:2000']]);
+
+        DB::transaction(function () use ($inscription, $validated) {
+            $entity = $inscription->registrationEntity();
+
+            $inscription->update(['statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED]);
+            $entity?->update(['statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED]);
+            $entity?->user?->update(['statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED]);
+
+            $inscription->rejetinscriptions()
+                ->where('statut', 'active')
+                ->update(['statut' => 'inactive']);
+
+            $inscription->rejetinscriptions()->create([
+                'raison' => $validated['raison'],
+                'statut' => 'active',
+            ]);
+
+            $entity?->user?->notify(
+                new RegistrationComplementsRequested($validated['raison'], $inscription->numero_dossier)
+            );
+        });
+
+        return back()->with('success', 'Demande de compléments envoyée.');
+    }
+
     public function download(string $piece): StreamedResponse
     {
         abort_unless(auth()->user()?->isAdmin(), 403);
@@ -110,7 +169,7 @@ class RegistrationController extends Controller
         abort_unless($pieceInscription->piece && Storage::disk('local')->exists($pieceInscription->piece), 404);
 
         $extension = pathinfo($pieceInscription->piece, PATHINFO_EXTENSION);
-        $filename = trim(($pieceInscription->pieceafournir?->libelle ?? 'document').($extension ? '.'.$extension : ''));
+        $filename = trim(($pieceInscription->pieceafournir?->libelle ?? 'document') . ($extension ? '.' . $extension : ''));
 
         return Storage::disk('local')->download($pieceInscription->piece, $filename);
     }

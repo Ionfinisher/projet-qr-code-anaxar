@@ -70,7 +70,24 @@ class RegisteredUserController extends Controller
             'adresse' => ['nullable', 'string', 'max:255'],
             'ville' => ['required_if:user_type,societe,transitaire', 'nullable', 'string', 'max:255'],
             'nombre_camions' => ['nullable', 'integer', 'min:0', 'max:5000'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique(User::class)],
+            'email' => [
+                'required',
+                'string',
+                'lowercase',
+                'email',
+                'max:255',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $existing = User::query()->where('email', $value)->first();
+                    $hasRejectedInscription = Inscription::query()
+                        ->where('email', $value)
+                        ->where('statut', Inscription::STATUS_REJECTED)
+                        ->exists();
+
+                    if ($existing && ($existing->statut !== User::STATUS_REJECTED || ! $hasRejectedInscription)) {
+                        $fail('Cette adresse email est déjà utilisée par une demande active.');
+                    }
+                },
+            ],
             'password' => ['required', 'confirmed', Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
         ]);
 
@@ -114,24 +131,58 @@ class RegisteredUserController extends Controller
                 $entityKey => $entity->getKey(),
             ]);
 
-            $user = User::create([
-                'name' => $this->displayName($data),
-                'nom' => $data['nom'] ?? null,
-                'prenom' => $data['prenom'] ?? null,
-                'email' => $data['email'],
-                'password' => $data['password'],
-                'telephone' => $data['telephone'],
-                'adresse' => $data['adresse'] ?? null,
-                'user_type' => $data['user_type'],
-                'idpays' => $data['idpays'],
-                $entityKey => $entity->getKey(),
-                'statut' => User::STATUS_PENDING,
-            ]);
+            $user = User::query()
+                ->where('email', $data['email'])
+                ->lockForUpdate()
+                ->first();
 
-            $user->assignRole(Role::findOrCreate(
-                $isTransitaire ? 'transitaire' : 'transporteur',
-                'web'
-            ));
+            if ($user) {
+                $hasRejectedInscription = Inscription::query()
+                    ->where('email', $data['email'])
+                    ->where('statut', Inscription::STATUS_REJECTED)
+                    ->exists();
+
+                if ($user->statut !== User::STATUS_REJECTED || ! $hasRejectedInscription) {
+                    throw ValidationException::withMessages([
+                        'email' => 'Cette adresse email est déjà utilisée par une demande active.',
+                    ]);
+                }
+
+                $user->forceFill([
+                    'name' => $this->displayName($data),
+                    'nom' => $data['nom'] ?? null,
+                    'prenom' => $data['prenom'] ?? null,
+                    'password' => $data['password'],
+                    'telephone' => $data['telephone'],
+                    'adresse' => $data['adresse'] ?? null,
+                    'user_type' => $data['user_type'],
+                    'idpays' => $data['idpays'],
+                    $entityKey => $entity->getKey(),
+                    'idtransporteur' => $isTransitaire ? null : $entity->getKey(),
+                    'idtransitaire' => $isTransitaire ? $entity->getKey() : null,
+                    'statut' => User::STATUS_PENDING,
+                    'email_verified_at' => null,
+                ])->save();
+            } else {
+                $user = User::create([
+                    'name' => $this->displayName($data),
+                    'nom' => $data['nom'] ?? null,
+                    'prenom' => $data['prenom'] ?? null,
+                    'email' => $data['email'],
+                    'password' => $data['password'],
+                    'telephone' => $data['telephone'],
+                    'adresse' => $data['adresse'] ?? null,
+                    'user_type' => $data['user_type'],
+                    'idpays' => $data['idpays'],
+                    $entityKey => $entity->getKey(),
+                    'statut' => User::STATUS_PENDING,
+                ]);
+
+                $user->assignRole(Role::findOrCreate(
+                    $isTransitaire ? 'transitaire' : 'transporteur',
+                    'web'
+                ));
+            }
 
             foreach ($pieces as $piece) {
                 $file = $request->file("documents.{$piece->id}");

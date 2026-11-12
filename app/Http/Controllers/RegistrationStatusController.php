@@ -19,6 +19,7 @@ class RegistrationStatusController extends Controller
         Inscription::STATUS_PENDING => 'En cours de validation',
         Inscription::STATUS_APPROVED => 'Validé',
         Inscription::STATUS_REJECTED => 'À corriger',
+        Inscription::STATUS_COMPLEMENTS_REQUESTED => 'Compléments demandés',
     ];
 
     public function create(Request $request): Response
@@ -101,7 +102,7 @@ class RegistrationStatusController extends Controller
         foreach ($inscription->rejetinscriptions->sortBy('created_at') as $rejection) {
             $history[] = [
                 'at' => $rejection->created_at?->toISOString(),
-                'title' => 'Compléments demandés',
+                'title' => $inscription->statut === Inscription::STATUS_REJECTED ? 'Demande rejetée' : 'Compléments demandés',
                 'description' => $rejection->raison,
             ];
         }
@@ -113,9 +114,9 @@ class RegistrationStatusController extends Controller
             'email' => $inscription->email,
             'phone' => $entity?->telephone,
             'submitted_at' => $inscription->created_at?->toISOString(),
-            'rejection_reason' => $inscription->statut === Inscription::STATUS_REJECTED ? $inscription->rejetinscriptions->last()?->raison : null,
-            'can_edit' => $inscription->statut === Inscription::STATUS_REJECTED,
-            'edit_url' => $inscription->statut === Inscription::STATUS_REJECTED ? route('registration.edit', ['numeroDossier' => $inscription->numero_dossier, 'email' => $inscription->email]) : null,
+            'rejection_reason' => in_array($inscription->statut, [Inscription::STATUS_REJECTED, Inscription::STATUS_COMPLEMENTS_REQUESTED], true) ? $inscription->rejetinscriptions->last()?->raison : null,
+            'can_edit' => $inscription->statut === Inscription::STATUS_COMPLEMENTS_REQUESTED,
+            'edit_url' => $inscription->statut === Inscription::STATUS_COMPLEMENTS_REQUESTED ? route('registration.edit', ['numeroDossier' => $inscription->numero_dossier, 'email' => $inscription->email]) : null,
             'identity' => [
                 ['label' => 'Type de compte', 'value' => $type],
                 ['label' => $isParticulier ? 'Nom' : 'Raison sociale', 'value' => $entity?->raisonsociale ?: trim(($entity?->prenom ?? '').' '.($entity?->nom ?? ''))],

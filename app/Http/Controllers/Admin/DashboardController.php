@@ -29,6 +29,10 @@ class DashboardController extends Controller
 
         $pendingRegistrations = Inscription::query()
             ->where('statut', Inscription::STATUS_PENDING)
+            ->where(function ($query) {
+                $query->whereHas('transporteur.user', fn ($user) => $user->whereNotNull('email_verified_at'))
+                    ->orWhereHas('transitaire.user', fn ($user) => $user->whereNotNull('email_verified_at'));
+            })
             ->with(['transporteur', 'transitaire'])
             ->latest()
             ->limit(5)
@@ -96,6 +100,10 @@ class DashboardController extends Controller
             'stats' => [
                 'pending_registrations' => Inscription::query()
                     ->where('statut', Inscription::STATUS_PENDING)
+                    ->where(function ($query) {
+                        $query->whereHas('transporteur.user', fn ($user) => $user->whereNotNull('email_verified_at'))
+                            ->orWhereHas('transitaire.user', fn ($user) => $user->whereNotNull('email_verified_at'));
+                    })
                     ->count(),
                 'pending_demandes' => DemandeRdv::query()
                     ->where('status', DemandeRdv::STATUS_PENDING)

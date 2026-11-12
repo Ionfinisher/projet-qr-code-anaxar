@@ -68,7 +68,7 @@ export function InscriptionDetail({ ins, actions, head = true }) {
       <InscriptionStatusAlert ins={ins} />
       {actions}
       <Card>
-        <SectionTitle icon={ACCOUNT_KINDS[ins.kind].icon}>Identité</SectionTitle>
+        <SectionTitle icon="user">Identité</SectionTitle>
         <KeyValue items={insIdentity(ins)} />
       </Card>
       <Card>

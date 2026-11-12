@@ -132,6 +132,77 @@ class RegistrationWorkflowTest extends TestCase
         $this->assertDatabaseMissing('users', ['email' => 'acme@example.com']);
     }
 
+    public function test_rejected_email_can_create_a_new_inscription_by_reusing_the_user(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+
+        $registration = $this->createRejectedRegistration();
+        $registration->update(['statut' => Inscription::STATUS_REJECTED]);
+        $registration->transporteur->update(['statut' => Transporteur::STATUS_REJECTED]);
+        $registration->transporteur->user->update([
+            'statut' => User::STATUS_REJECTED,
+            'email_verified_at' => now(),
+        ]);
+        $pays = $this->createPays();
+        $piece = $this->createPiece();
+
+        $this->post('/register', $this->registrationPayload($pays, $piece))
+            ->assertRedirect(route('login'));
+
+        $user = User::where('email', 'acme@example.com')->firstOrFail();
+        $this->assertSame(1, User::where('email', 'acme@example.com')->count());
+        $this->assertSame(2, Inscription::where('email', 'acme@example.com')->count());
+        $this->assertNull($user->email_verified_at);
+        $this->assertSame(User::STATUS_PENDING, $user->statut);
+        $this->assertSame(Inscription::STATUS_PENDING, Inscription::latest('id')->firstOrFail()->statut);
+        $this->assertNotSame($registration->idtransporteur, $user->idtransporteur);
+    }
+
+    public function test_active_email_cannot_create_a_duplicate_inscription(): void
+    {
+        Storage::fake('local');
+        $pays = $this->createPays();
+        $piece = $this->createPiece();
+        $payload = $this->registrationPayload($pays, $piece);
+
+        $this->post('/register', $payload)->assertRedirect(route('login'));
+        $this->post('/register', $payload)->assertSessionHasErrors('email');
+        $this->assertSame(1, User::where('email', 'acme@example.com')->count());
+        $this->assertSame(1, Inscription::where('email', 'acme@example.com')->count());
+    }
+
+    public function test_unverified_registrations_are_hidden_from_admin_surfaces(): void
+    {
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $registration = $this->createRejectedRegistration();
+        $registration->update(['statut' => Inscription::STATUS_PENDING]);
+        $registration->transporteur->user->update([
+            'statut' => User::STATUS_PENDING,
+            'email_verified_at' => null,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.dashboard'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('stats.pending_registrations', 0)
+                ->has('pendingRegistrations', 0));
+
+        $this->actingAs($admin)
+            ->get(route('admin.registrations.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('registrations.data', 0));
+    }
+
     public function test_registration_rejects_an_invalid_document_type(): void
     {
         Storage::fake('local');
@@ -283,6 +354,40 @@ class RegistrationWorkflowTest extends TestCase
             'statut' => 'active',
         ]);
         Notification::assertSentTo($registration->transporteur->user, RegistrationRejected::class);
+        $this->get(route('registration.edit', [
+            'numeroDossier' => $registration->numero_dossier,
+            'email' => $registration->email,
+        ]))->assertNotFound();
+    }
+
+    public function test_admin_can_request_complements_and_applicant_can_edit_the_same_dossier(): void
+    {
+        Notification::fake();
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $registration = $this->createRejectedRegistration();
+        $registration->update(['statut' => Inscription::STATUS_PENDING]);
+
+        $this->actingAs($admin)
+            ->post(route('admin.registrations.complements', $registration), ['raison' => 'Ajoutez une pièce lisible'])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(Inscription::STATUS_COMPLEMENTS_REQUESTED, $registration->fresh()->statut);
+        Notification::assertSentTo($registration->fresh()->transporteur->user, \App\Notifications\RegistrationComplementsRequested::class);
+
+        $this->get(route('registration.edit', [
+            'numeroDossier' => $registration->numero_dossier,
+            'email' => $registration->email,
+        ]))->assertOk();
     }
 
     public function test_rejected_registration_can_be_resubmitted(): void
@@ -301,7 +406,7 @@ class RegistrationWorkflowTest extends TestCase
 
         $pieceInscription = PieceInscription::create([
             'piece' => $oldPath,
-            'statut' => 'rejected',
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'idpieceafournir' => $piece->id,
             'idinscription' => $registration->id,
         ]);
@@ -355,7 +460,7 @@ class RegistrationWorkflowTest extends TestCase
         $piece = $this->createPiece();
         PieceInscription::create([
             'piece' => 'registrations/'.$registration->id.'/cfe.pdf',
-            'statut' => Inscription::STATUS_REJECTED,
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'idpieceafournir' => $piece->id,
             'idinscription' => $registration->id,
         ]);
@@ -442,7 +547,7 @@ class RegistrationWorkflowTest extends TestCase
         ]);
 
         $response->assertSessionHasErrors('user_type');
-        $this->assertSame(Inscription::STATUS_REJECTED, $registration->fresh()->statut);
+        $this->assertSame(Inscription::STATUS_COMPLEMENTS_REQUESTED, $registration->fresh()->statut);
     }
 
     public function test_rejected_transitaire_registration_can_be_updated(): void
@@ -466,7 +571,7 @@ class RegistrationWorkflowTest extends TestCase
 
         $registration = Inscription::create([
             'email' => 'transitaire@example.com',
-            'statut' => Inscription::STATUS_REJECTED,
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'token' => 'token-transitaire',
             'idtransitaire' => $transitaire->id,
         ]);
@@ -475,7 +580,7 @@ class RegistrationWorkflowTest extends TestCase
             'name' => 'Acme Transit',
             'email' => 'transitaire@example.com',
             'password' => 'Password1!',
-            'statut' => User::STATUS_REJECTED,
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'idtransitaire' => $transitaire->id,
         ]);
 
@@ -534,7 +639,7 @@ class RegistrationWorkflowTest extends TestCase
         $response->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Registration/Status')
             ->where('registration.numero_dossier', $registration->numero_dossier)
-            ->where('registration.status', Inscription::STATUS_REJECTED)
+            ->where('registration.status', Inscription::STATUS_COMPLEMENTS_REQUESTED)
             ->where('registration.can_edit', true));
     }
 
@@ -780,12 +885,12 @@ class RegistrationWorkflowTest extends TestCase
             'raisonsociale' => 'Acme Transport',
             'typetransporteur' => PieceAFournir::TYPE_SOCIETE,
             'telephone' => '+228 90 00 00 00',
-            'statut' => 'rejected',
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
         ]);
 
         $registration = Inscription::create([
             'email' => 'acme@example.com',
-            'statut' => Inscription::STATUS_REJECTED,
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'token' => 'token',
             'idtransporteur' => $transporteur->id,
         ]);
@@ -795,7 +900,7 @@ class RegistrationWorkflowTest extends TestCase
             'email' => 'acme@example.com',
             'password' => 'Password1!',
             'email_verified_at' => now(),
-            'statut' => User::STATUS_REJECTED,
+            'statut' => Inscription::STATUS_COMPLEMENTS_REQUESTED,
             'idtransporteur' => $transporteur->id,
         ]);
 

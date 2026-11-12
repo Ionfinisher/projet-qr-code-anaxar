@@ -59,6 +59,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('/registrations', [AdminRegistrationController::class, 'index'])->name('registrations.index');
     Route::get('/registrations/{inscription}', [AdminRegistrationController::class, 'show'])->name('registrations.show');
     Route::post('/registrations/{inscription}/approve', [AdminRegistrationController::class, 'approve'])->name('registrations.approve');
+    Route::post('/registrations/{inscription}/complements', [AdminRegistrationController::class, 'requestComplements'])->name('registrations.complements');
     Route::post('/registrations/{inscription}/reject', [AdminRegistrationController::class, 'reject'])->name('registrations.reject');
     Route::get('/registration-documents/{piece}/download', [AdminRegistrationController::class, 'download'])->name('registrations.documents.download');
 

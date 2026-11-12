@@ -12,7 +12,8 @@ import { Icon } from '@/Components/ui/Icon';
 const STATUS = {
     pending: { label: 'En attente de traitement', tone: 'warn', icon: 'clock' },
     approved: { label: 'Demande validée', tone: 'ok', icon: 'check' },
-    rejected: { label: 'À compléter / Corriger', tone: 'bad', icon: 'triangle-alert' },
+    complements_requested: { label: 'Compléments demandés', tone: 'warn', icon: 'file-up' },
+    rejected: { label: 'Demande rejetée', tone: 'bad', icon: 'triangle-alert' },
 };
 
 const size = (bytes) => {
@@ -57,7 +58,8 @@ function RegistrationDetails({ registration }) {
                 <div className="mt-5">
                     {registration.status === 'pending' && <Alert tone="info" icon="hourglass" title="En cours d’examen">L’administration vérifie les pièces. La décision est envoyée par e-mail et SMS.</Alert>}
                     {registration.status === 'approved' && <Alert tone="ok" icon="check" title="Dossier validé">Votre demande a été validée par l’administration.</Alert>}
-                    {registration.status === 'rejected' && <Alert tone="warn" icon="file-up" title="Compléments demandés par l’administration">{registration.rejection_reason}</Alert>}
+                    {registration.status === 'complements_requested' && <Alert tone="warn" icon="file-up" title="Compléments demandés par l’administration">{registration.rejection_reason}</Alert>}
+                    {registration.status === 'rejected' && <Alert tone="bad" icon="triangle-alert" title="Demande rejetée" action={<Link href={route('register')} className={buttonClass({ variant: 'danger', size: 'sm' })}>Nouvelle demande</Link>}>Cette demande est terminée. Créez une nouvelle demande avec les corrections indiquées : {registration.rejection_reason}</Alert>}
                 </div>
             </div>
 

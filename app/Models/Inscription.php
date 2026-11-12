@@ -17,6 +17,8 @@ class Inscription extends Model
 
     public const STATUS_REJECTED = 'rejected';
 
+    public const STATUS_COMPLEMENTS_REQUESTED = 'complements_requested';
+
     protected $table = 'inscription';
 
     protected string $keyColumn = 'keyinscription';
