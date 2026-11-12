@@ -1,14 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import PublicLayout from '@/Layouts/PublicLayout';
-import { Field, Input, Select } from '@/Components/ui/Field';
 import { PlaceAutocomplete } from '@/Components/ui/PlaceAutocomplete';
-import { PasswordInput, PasswordRules } from '@/Components/ui/PasswordInput';
-import { RadioCards, Checkbox } from '@/Components/ui/Choice';
-import { Button } from '@/Components/ui/Button';
-import { Badge } from '@/Components/ui/Badge';
-import { Alert } from '@/Components/ui/Feedback';
-import { Icon } from '@/Components/ui/Icon';
 import { cn } from '@/Lib/cn';
 import { emailValid } from '@/Lib/domain';
 import {
