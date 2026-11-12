@@ -6,10 +6,10 @@ import { cap } from '../../selectors.js';
 function ModeCard({ title, text, trucks, onClick }) {
   return (
     <button type="button" onClick={onClick}
-      className="group flex cursor-pointer flex-col items-start gap-3 rounded-3xl border border-slate-200 bg-white p-6 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors hover:border-brand-300 hover:bg-brand-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">
-      <span aria-hidden="true" className="flex h-16 items-end gap-1.5">
+      className="group flex cursor-pointer flex-col items-start gap-3 rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-[0_1px_2px_rgba(15,23,42,0.05)] transition-colors hover:border-brand-300 hover:bg-brand-50/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 sm:p-6">
+      <span aria-hidden="true" className="flex h-14 items-end gap-1.5">
         {Array.from({ length: trucks }, (_, i) => (
-          <span key={i} className={cn('block w-12 rounded-md', i === 0 ? 'h-12 bg-brand-500' : i === 1 ? 'h-10 bg-slate-800' : 'h-8 bg-sky-500')} />
+          <span key={i} className={cn('block w-11 rounded-md', i === 0 ? 'h-11 bg-brand-500' : i === 1 ? 'h-10 bg-slate-800' : 'h-9 bg-sky-500')} />
         ))}
       </span>
       <h3 className="text-lg font-bold text-slate-900">{title}</h3>
@@ -33,7 +33,7 @@ export function ModePick({ onPick, onCancel, initialSlot }) {
         </div>
         <Button variant="ghost" icon="x" onClick={onCancel}>Annuler</Button>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid max-w-3xl gap-3 md:grid-cols-2">
         <ModeCard title="Un camion" text="Un conteneur, un chauffeur, un QR code." trucks={1} onClick={() => onPick('single')} />
         <ModeCard title="Plusieurs camions" text="Une seule demande, un QR code par camion. Saisie ligne à ligne ou collage depuis un tableur." trucks={3} onClick={() => onPick('lot')} />
       </div>

@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Head, useForm } from '@inertiajs/react';
 import PublicLayout from '@/Layouts/PublicLayout';
+import { Field, Input, Select } from '@/Components/ui/Field';
+import { PlaceAutocomplete } from '@/Components/ui/PlaceAutocomplete';
+import { PasswordInput, PasswordRules } from '@/Components/ui/PasswordInput';
+import { RadioCards, Checkbox } from '@/Components/ui/Choice';
+import { Button } from '@/Components/ui/Button';
+import { Badge } from '@/Components/ui/Badge';
+import { Alert } from '@/Components/ui/Feedback';
+import { Icon } from '@/Components/ui/Icon';
 import { cn } from '@/Lib/cn';
 import { emailValid } from '@/Lib/domain';
 import {
@@ -399,7 +407,15 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                         </Field>
                                     </div>
                                     <Field id="reg-adresse" label="Adresse du siège" required error={errors.adresse || stepErrors.adresse}>
-                                        <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
+                                        <PlaceAutocomplete
+                                            id="reg-adresse"
+                                            kind="address"
+                                            placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé"
+                                            value={data.adresse}
+                                            onChange={(val) => setData('adresse', val)}
+                                            countryCode={selectedCountry?.code}
+                                            invalid={Boolean(errors.adresse || stepErrors.adresse)}
+                                        />
                                     </Field>
                                     <p className="text-sm font-semibold text-slate-700">Représentant légal</p>
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -428,7 +444,15 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                         </Field>
                                     </div>
                                     <Field id="reg-adresse" label="Adresse du siège / Domicile" error={errors.adresse || stepErrors.adresse}>
-                                        <Input id="reg-adresse" placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé" value={data.adresse} onChange={(e) => setData('adresse', e.target.value)} />
+                                        <PlaceAutocomplete
+                                            id="reg-adresse"
+                                            kind="address"
+                                            placeholder="Ex. Zone portuaire, Boulevard du Mono, Lomé"
+                                            value={data.adresse}
+                                            onChange={(val) => setData('adresse', val)}
+                                            countryCode={selectedCountry?.code}
+                                            invalid={Boolean(errors.adresse || stepErrors.adresse)}
+                                        />
                                     </Field>
                                 </>
                             )}
@@ -459,7 +483,14 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                     </Select>
                                 </Field>
                                 <Field id="reg-ville" label="Ville" required error={errors.ville || stepErrors.ville}>
-                                    <Input id="reg-ville" placeholder="Ex. Lomé" value={data.ville} onChange={(e) => setData('ville', e.target.value)} />
+                                    <PlaceAutocomplete
+                                        id="reg-ville"
+                                        placeholder="Ex. Lomé"
+                                        value={data.ville}
+                                        onChange={(val) => setData('ville', val)}
+                                        countryCode={selectedCountry?.code}
+                                        invalid={Boolean(errors.ville || stepErrors.ville)}
+                                    />
                                 </Field>
                                 {data.user_type !== 'transitaire' && (
                                     <Field id="reg-camions" label="Nombre de camions" optional error={errors.nombre_camions || stepErrors.nombre_camions}>

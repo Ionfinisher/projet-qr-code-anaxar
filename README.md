@@ -96,6 +96,42 @@ administrateurs.
 | POST | `/admin/registrations/{id}/approve` | Valider un dossier |
 | POST | `/admin/registrations/{id}/reject` | Rejeter un dossier |
 | GET | `/admin/registration-documents/{piece}/download` | Télécharger une pièce |
+| GET | `/api/places/cities` | Suggestions de villes (proxy Google Places, filtré par pays) |
+| GET | `/api/places/addresses` | Suggestions d'adresses (proxy Google Places, filtré par pays) |
+
+## Autocomplétion des villes et adresses (Google Places)
+
+Les champs **Ville** et **Adresse du siège** de l'inscription proposent des
+suggestions issues de
+[Google Places API (New) — Autocomplete](https://developers.google.com/maps/documentation/places/web-service/place-autocomplete).
+Les suggestions sont restreintes au pays sélectionné (`includedRegionCodes`).
+
+- Villes : `includedPrimaryTypes: ["(cities)"]`.
+- Adresses : `includedPrimaryTypes: ["street_address", "premise", "subpremise", "route", "plus_code"]`
+  (adresses, bâtiments, voies et plus codes pour les zones sans adressage numéroté).
+
+Les requêtes passent par un **proxy serveur** (`GET /api/places/cities` et
+`GET /api/places/addresses`) : la clé Google n'est jamais exposée au navigateur.
+Les endpoints sont publics, limités à 30 requêtes/minute par IP, et les résultats
+identiques sont mis en cache 24 h.
+
+### Configuration
+
+1. Activer **Places API (New)** dans le projet Google Cloud (facturation requise).
+2. Créer une clé API et la renseigner dans `.env` :
+
+   ```dotenv
+   GOOGLE_PLACES_API_KEY=votre-cle
+   ```
+
+   Variables optionnelles : `GOOGLE_PLACES_ENDPOINT`, `GOOGLE_PLACES_TIMEOUT` (secondes).
+
+Sans clé (ou en cas de quota dépassé / panne réseau), les endpoints répondent
+avec une liste vide et **la saisie manuelle de la ville et de l'adresse reste
+possible** : aucune fonctionnalité n'est bloquée.
+
+Le pays `XX` (« Autre ») n'a pas de code ISO : aucune restriction de pays n'est
+alors appliquée.
 
 ## Tests
 
@@ -108,4 +144,6 @@ php artisan test
 
 Couverture fonctionnelle : inscription dynamique avec pièces, pièce obligatoire
 manquante, type de fichier invalide, connexion bloquée/autorisée, vérification
-email, approbation/rejet administrateur et resoumission d'un dossier rejeté.
+email, approbation/rejet administrateur, resoumission d'un dossier rejeté et
+proxy d'autocomplétion des villes et adresses (validation, cache, dégradation
+gracieuse).
