@@ -7,10 +7,12 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\URL;
+use App\Notifications\Concerns\RetryableMailNotification;
 
 class VerifyRegistrationEmail extends Notification implements ShouldQueue
 {
     use Queueable;
+    use RetryableMailNotification;
 
     public function __construct(private readonly ?string $numeroDossier = null) {}
 

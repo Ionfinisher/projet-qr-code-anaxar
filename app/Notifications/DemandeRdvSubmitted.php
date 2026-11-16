@@ -7,10 +7,12 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use App\Notifications\Concerns\RetryableMailNotification;
 
 class DemandeRdvSubmitted extends Notification implements ShouldQueue
 {
     use Queueable;
+    use RetryableMailNotification;
 
     public function __construct(private readonly DemandeRdv $demande)
     {

@@ -29,8 +29,8 @@ des transporteurs (sociétés et particuliers).
    `transitaire` pour transitaire.
 7. L'utilisateur vérifie son email via un lien signé.
 8. Un administrateur valide ou rejette le dossier depuis `/admin/registrations`.
-9. En cas de rejet, le demandeur peut corriger et resoumettre son dossier depuis
-   la page de suivi (`/registration/status`).
+9. En cas de rejet, le demandeur doit créer une nouvelle demande depuis la page
+   de suivi (`/registration/status`).
 
 Le numéro de dossier (`DOS-AAAAMMJJ-XXXXXX`) et les clés métier
 (`keyinscription`, `keytransporteur`, `keytransitaire`, `keypieceinscription`,
@@ -51,6 +51,32 @@ php artisan migrate --seed
 npm ci
 npm run build   # ou npm run dev en développement
 php artisan serve
+```
+
+### Emails en arrière-plan
+
+Les emails sont placés dans la file Laravel `database` et ne bloquent pas les
+requêtes web. Après les migrations, lancez un worker dans un processus
+persistant :
+
+```bash
+php artisan queue:work database --tries=5 --backoff=60
+```
+
+Chaque notification email est tentée au maximum cinq fois avec des délais
+croissants (60, 120, 240 puis 480 secondes). Les erreurs définitives sont
+enregistrées dans `failed_jobs` :
+
+```bash
+php artisan queue:failed
+php artisan queue:retry all
+```
+
+En production, le worker doit être supervisé (par exemple avec Supervisor ou
+un service systemd) et redémarré après chaque déploiement :
+
+```bash
+php artisan queue:restart
 ```
 
 > Si votre version de PHP est 8.5, le `composer.lock` actuel (Inertia 0.6)
@@ -95,6 +121,7 @@ administrateurs.
 | GET | `/admin/registrations` | Liste des dossiers (admin) |
 | POST | `/admin/registrations/{id}/approve` | Valider un dossier |
 | POST | `/admin/registrations/{id}/reject` | Rejeter un dossier |
+| GET | `/admin/registration-documents/{piece}/preview` | Prévisualiser une pièce (admin) |
 | GET | `/admin/registration-documents/{piece}/download` | Télécharger une pièce |
 | GET | `/api/places/cities` | Suggestions de villes (proxy Google Places, filtré par pays) |
 | GET | `/api/places/addresses` | Suggestions d'adresses (proxy Google Places, filtré par pays) |

@@ -13,6 +13,7 @@ use App\Notifications\RegistrationApproved;
 use App\Notifications\RegistrationPending;
 use App\Notifications\RegistrationRejected;
 use App\Notifications\VerifyRegistrationEmail;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -116,6 +117,16 @@ class RegistrationWorkflowTest extends TestCase
             User::where('email', 'acme@example.com')->firstOrFail(),
             VerifyRegistrationEmail::class
         );
+    }
+
+    public function test_registration_email_notification_is_queued_with_retries(): void
+    {
+        $notification = new VerifyRegistrationEmail('DOS-TEST');
+
+        $this->assertInstanceOf(ShouldQueue::class, $notification);
+        $this->assertSame(5, $notification->tries);
+        $this->assertSame([60, 120, 240, 480], $notification->backoff);
+        $this->assertTrue(config('queue.connections.database.after_commit'));
     }
 
     public function test_registration_fails_when_a_required_document_is_missing(): void

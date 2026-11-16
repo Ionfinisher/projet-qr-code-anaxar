@@ -6,10 +6,12 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use App\Notifications\Concerns\RetryableMailNotification;
 
 class RegistrationApproved extends Notification implements ShouldQueue
 {
     use Queueable;
+    use RetryableMailNotification;
 
     public function via(object $notifiable): array
     {
