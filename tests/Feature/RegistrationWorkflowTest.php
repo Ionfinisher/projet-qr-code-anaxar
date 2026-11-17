@@ -401,6 +401,63 @@ class RegistrationWorkflowTest extends TestCase
         ]))->assertNotFound();
     }
 
+    public function test_admin_rejection_requires_a_comment_for_other_reason(): void
+    {
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $registration = $this->createRejectedRegistration();
+        $registration->update(['statut' => Inscription::STATUS_PENDING]);
+
+        $this->actingAs($admin)
+            ->from(route('admin.registrations.index'))
+            ->post(route('admin.registrations.reject', $registration), [
+                'motif' => 'Autre motif',
+                'comment' => 'non',
+            ])
+            ->assertRedirect(route('admin.registrations.index'))
+            ->assertSessionHasErrors('comment');
+
+        $this->assertSame(Inscription::STATUS_PENDING, $registration->fresh()->statut);
+        $this->assertDatabaseMissing('rejet_inscription', [
+            'idinscription' => $registration->id,
+            'statut' => 'active',
+        ]);
+    }
+
+    public function test_historical_rejected_registration_remains_visible_after_resubmission(): void
+    {
+        Role::create(['name' => 'admin', 'guard_name' => 'web']);
+        $admin = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.com',
+            'password' => 'Password1!',
+            'email_verified_at' => now(),
+            'statut' => User::STATUS_APPROVED,
+        ]);
+        $admin->assignRole('admin');
+
+        $registration = $this->createRejectedRegistration();
+        $registration->update(['statut' => Inscription::STATUS_REJECTED]);
+        $registration->transporteur->user->update(['email_verified_at' => null]);
+
+        $this->actingAs($admin)
+            ->get(route('admin.registrations.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Registrations/Index')
+                ->where('registrations.data.0.id', $registration->id)
+                ->where('registrations.data.0.status', Inscription::STATUS_REJECTED)
+            );
+    }
+
     public function test_admin_can_request_complements_and_applicant_can_edit_the_same_dossier(): void
     {
         Notification::fake();

@@ -1,6 +1,6 @@
 // Éléments communs des modules d'administration.
 import { Badge, EmptyState, Icon } from '@/Components/ui/index.js';
-import { urgencyOf } from '../selectors.js';
+import { urgencyOf } from './selectors.js';
 import { cn } from '@/Lib/cn.js';
 
 /** Délai avant le créneau d'une demande en attente. */

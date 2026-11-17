@@ -23,8 +23,11 @@ class RegistrationController extends Controller
         return Inertia::render('Admin/Registrations/Index', [
             'registrations' => Inscription::with(['transporteur', 'transitaire', 'latestRejection', 'pieceinscriptions.pieceafournir'])
                 ->where(function ($query) {
-                    $query->whereHas('transporteur.user', fn ($user) => $user->whereNotNull('email_verified_at'))
-                        ->orWhereHas('transitaire.user', fn ($user) => $user->whereNotNull('email_verified_at'));
+                    $query->where('statut', Inscription::STATUS_REJECTED)
+                        ->orWhere(function ($verified) {
+                            $verified->whereHas('transporteur.user', fn ($user) => $user->whereNotNull('email_verified_at'))
+                                ->orWhereHas('transitaire.user', fn ($user) => $user->whereNotNull('email_verified_at'));
+                        });
                 })
                 ->latest()
                 ->paginate(20)
@@ -110,9 +113,22 @@ class RegistrationController extends Controller
 
     public function reject(Request $request, Inscription $inscription): RedirectResponse
     {
-        $validated = $request->validate(['raison' => ['required', 'string', 'max:2000']]);
+        $validated = $request->validate([
+            'raison' => ['nullable', 'string', 'max:2000'],
+            'motif' => ['nullable', 'string', 'max:1000'],
+            'comment' => ['nullable', 'string', 'max:1000', 'required_if:motif,Autre motif', 'min:4'],
+        ]);
+        $reason = $validated['raison'] ?? null;
 
-        DB::transaction(function () use ($inscription, $validated) {
+        if (! $reason && ! empty($validated['motif'])) {
+            $reason = trim($validated['motif'].' '.($validated['comment'] ?? ''));
+        }
+
+        if (! $reason) {
+            return back()->withErrors(['raison' => 'Le motif du rejet est obligatoire.']);
+        }
+
+        DB::transaction(function () use ($inscription, $reason) {
             $entity = $inscription->registrationEntity();
 
             $inscription->update(['statut' => Inscription::STATUS_REJECTED]);
@@ -124,12 +140,12 @@ class RegistrationController extends Controller
                 ->update(['statut' => 'inactive']);
 
             $inscription->rejetinscriptions()->create([
-                'raison' => $validated['raison'],
+                'raison' => $reason,
                 'statut' => 'active',
             ]);
 
             $entity?->user?->notify(
-                new RegistrationRejected($validated['raison'], $inscription->numero_dossier)
+                new RegistrationRejected($reason, $inscription->numero_dossier)
             );
         });
 

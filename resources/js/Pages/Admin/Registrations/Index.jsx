@@ -130,7 +130,7 @@ function RegistrationDetail({ registration }) {
         if (result) {
             postDecision(
                 route('admin.registrations.reject', registration.id),
-                { raison: `${result.motif}${result.comment ? ` ${result.comment}` : ''}` },
+                { motif: result.motif, comment: result.comment },
                 'Demande rejetée.',
             );
         }
