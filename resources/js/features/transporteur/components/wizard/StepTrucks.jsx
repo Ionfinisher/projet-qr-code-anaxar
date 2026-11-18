@@ -1,43 +1,30 @@
-// Étape 2 : camion(s) — chauffeur (téléphone, permis), véhicule (plaques ISO 3166-1), conteneur ISO 6346, BL, marchandise, VGM.
+// Étape 2 : camion(s) — chauffeur (téléphone, permis), véhicule (plaques ISO 3166-1), conteneur, BL, marchandise, VGM.
 import { useMemo, useState } from 'react';
-import { COUNTRIES, ISO_TYPES, ISO_TYPE, parseContainer, parseBL, normalizePlate, licenseValid } from '@/Lib/domain';
+import { COUNTRIES, ISO_TYPES, ISO_TYPE, normalizePlate, licenseValid } from '@/Lib/domain';
 import { notify } from '@/Lib/alerts';
-import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, Icon, fieldProps } from '@/Components/ui';
+import { Field, Input, Select, Textarea, PhoneInput, Button, IconButton, Badge, Modal, fieldProps } from '@/Components/ui';
 import { ContainerNumber, Plate } from '@/Components/domain';
 import { cn } from '@/Lib/cn';
 import { newTruck, parsePastedTrucks } from '../../demandeForm.js';
 import { TruckNo, SubTitle } from './WizardParts.jsx';
 
-/** N° de conteneur avec diagnostic ISO 6346 en direct (chiffre de contrôle, propriétaire BIC). */
+/** N° de conteneur (aucun contrôle de format ; requis sauf pour un retrait de vide). */
 export function ContainerField({ id, value, onChange, error, optional }) {
-  const p = parseContainer(value);
-  const showErr = error && !p.valid ? error : null;
-  const state = !value ? null : p.valid ? 'ok' : p.complete ? 'bad' : null;
-  const hint = value ? p.message : 'ISO 6346 : 4 lettres + 7 chiffres, ex. CSQU 305438 3.';
+  const hint = optional ? 'Laissez vide pour un retrait de conteneur vide.' : undefined;
   return (
-    <Field id={id} label="N° de conteneur" required={!optional} optional={optional} error={showErr} hint={hint} hintTone={p.valid ? 'ok' : undefined}>
-      <div className="relative">
-        <Input mono autoComplete="off" spellCheck={false} maxLength={15} placeholder="Ex. MSCU 482913 0" className="pr-10"
-          {...fieldProps(id, showErr, hint)} value={value} onChange={ev => onChange(ev.target.value.toUpperCase())} />
-        {state && (
-          <span className={cn('pointer-events-none absolute inset-y-0 right-3 flex items-center', state === 'ok' ? 'text-emerald-600' : 'text-rose-600')}>
-            <Icon name={state === 'ok' ? 'circle-check' : 'circle-x'} size={20} />
-          </span>
-        )}
-      </div>
+    <Field id={id} label="N° de conteneur" required={!optional} optional={optional} error={error} hint={hint}>
+      <Input mono autoComplete="off" spellCheck={false} maxLength={15} placeholder="Ex. MSCU 482913 0"
+        {...fieldProps(id, error, hint)} value={value} onChange={ev => onChange(ev.target.value.toUpperCase())} />
     </Field>
   );
 }
 
-/** N° de connaissement ; le préfixe SCAC identifie l'armateur. */
+/** N° de connaissement (aucun contrôle de format ; requis pour import/export). */
 export function BLField({ id, value, onChange, error, optional }) {
-  const b = parseBL(value);
-  const showErr = error && !b.valid ? error : null;
-  const hint = value && b.message ? b.message : 'Le préfixe SCAC identifie l’armateur, ex. MEDU pour MSC.';
   return (
-    <Field id={id} label="N° de connaissement (BL)" required={!optional} optional={optional} error={showErr} hint={hint} hintTone={b.valid && b.carrier ? 'ok' : undefined}>
+    <Field id={id} label="N° de connaissement (BL)" required={!optional} optional={optional} error={error}>
       <Input mono autoComplete="off" spellCheck={false} maxLength={24} placeholder="Ex. MEDU45128830"
-        {...fieldProps(id, showErr, hint)} value={value} onChange={ev => onChange(ev.target.value.toUpperCase())} />
+        {...fieldProps(id, error)} value={value} onChange={ev => onChange(ev.target.value.toUpperCase())} />
     </Field>
   );
 }
@@ -52,8 +39,8 @@ export function TruckForm({ t, i, op, e, setTruck }) {
       <div className="flex flex-col gap-3">
         <SubTitle>Chauffeur</SubTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Field id={id('first')} label="Prénom" required error={e.first}><Input {...fieldProps(id('first'), e.first)} value={t.first} onChange={ev => set({ first: ev.target.value })} /></Field>
           <Field id={id('last')} label="Nom" required error={e.last}><Input {...fieldProps(id('last'), e.last)} value={t.last} onChange={ev => set({ last: ev.target.value })} /></Field>
+          <Field id={id('first')} label="Prénom" required error={e.first}><Input {...fieldProps(id('first'), e.first)} value={t.first} onChange={ev => set({ first: ev.target.value })} /></Field>
           <Field id={id('phone')} label="Téléphone" required error={e.phone} hint="Reçoit le QR code par WhatsApp.">
             <PhoneInput id={id('phone')} cc={t.phoneCc} value={t.phone} onCc={v => set({ phoneCc: v })} onChange={v => set({ phone: v })} error={e.phone} hint="x" />
           </Field>
@@ -66,8 +53,8 @@ export function TruckForm({ t, i, op, e, setTruck }) {
       <div className="flex flex-col gap-3">
         <SubTitle>Véhicule</SubTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field id={id('cc')} label="Pays d’immatriculation" hint="Code ISO 3166-1.">
-            <Select {...fieldProps(id('cc'), null, 'x')} value={t.country} onChange={ev => set({ country: ev.target.value })}>
+          <Field id={id('cc')} label="Pays d’immatriculation" hint="Code ISO 3166-1." error={e.country}>
+            <Select {...fieldProps(id('cc'), e.country, 'x')} value={t.country} onChange={ev => set({ country: ev.target.value })}>
               {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}
             </Select>
           </Field>
@@ -83,8 +70,8 @@ export function TruckForm({ t, i, op, e, setTruck }) {
         <SubTitle>Conteneur</SubTitle>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <ContainerField id={id('ctr')} value={t.container} onChange={v => set({ container: v })} error={e.container} optional={op === 'MTP'} />
-          <Field id={id('iso')} label="Code taille/type ISO" hint={ISO_TYPE[t.iso]?.label}>
-            <Select {...fieldProps(id('iso'), null, 'x')} value={t.iso} onChange={ev => set({ iso: ev.target.value })}>
+          <Field id={id('iso')} label="Code taille/type ISO" hint={ISO_TYPE[t.iso]?.label} error={e.iso}>
+            <Select {...fieldProps(id('iso'), e.iso, 'x')} value={t.iso} onChange={ev => set({ iso: ev.target.value })}>
               {ISO_TYPES.map(x => <option key={x.code} value={x.code}>{x.code} · {x.label}</option>)}
             </Select>
           </Field>
@@ -109,7 +96,6 @@ export function TruckForm({ t, i, op, e, setTruck }) {
 export function PasteModal({ open, onClose, onImport }) {
   const [text, setText] = useState('');
   const rows = useMemo(() => parsePastedTrucks(text), [text]);
-  const valid = rows.filter(r => parseContainer(r.container).valid).length;
   const noLic = rows.filter(r => !licenseValid(r.license)).length;
   return (
     <Modal open={open} onClose={onClose} title="Coller une liste de camions" size="lg"
@@ -121,7 +107,7 @@ export function PasteModal({ open, onClose, onImport }) {
         placeholder={'MSCU4829130;MEDU45128830;4521 BX;Komlan AGBEKO;90114477;Riz en sacs;TG-2014587\nCSQU3054383;MEDU45128830;7781 KT;Yao MENSAH;91223344;Riz en sacs;TG-1987345'} />
       {rows.length > 0 && (
         <p className="text-sm text-slate-600">
-          {rows.length} ligne{rows.length > 1 ? 's' : ''} lue{rows.length > 1 ? 's' : ''} · {valid} numéro{valid > 1 ? 's' : ''} de conteneur valide{valid > 1 ? 's' : ''} (ISO 6346)
+          {rows.length} ligne{rows.length > 1 ? 's' : ''} lue{rows.length > 1 ? 's' : ''}
           {noLic > 0 ? ` · ${noLic} n° de permis manquant${noLic > 1 ? 's' : ''} ou invalide${noLic > 1 ? 's' : ''}` : ''}. Complétez les champs manquants après l’import.
         </p>
       )}
@@ -152,7 +138,6 @@ export function StepTrucks({ f, set, setTruck, e }) {
         const err = e[i] || {};
         const nErr = Object.keys(err).length;
         const collapsed = open[t.k] === false;
-        const c = parseContainer(t.container);
         return (
           <section key={t.k} aria-label={`Camion ${i + 1}`} className={cn('overflow-hidden rounded-2xl border bg-white', nErr ? 'border-rose-300' : 'border-slate-200')}>
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/70 px-4 py-2.5">
@@ -168,7 +153,7 @@ export function StepTrucks({ f, set, setTruck, e }) {
             </div>
             {collapsed ? (
               <div className="flex flex-wrap items-center gap-3 px-4 py-3 text-sm text-slate-600">
-                {c.valid ? <ContainerNumber value={c.raw} size="sm" /> : <span>Conteneur à saisir</span>}
+                {t.container ? <ContainerNumber value={t.container} size="sm" /> : <span>Conteneur à saisir</span>}
                 {t.tractor && <Plate country={t.country} value={t.tractor} size="sm" />}
                 <span>{`${t.first} ${t.last}`.trim() || 'Chauffeur à saisir'}</span>
               </div>

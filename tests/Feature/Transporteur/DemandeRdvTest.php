@@ -78,7 +78,7 @@ class DemandeRdvTest extends TestCase
             'driver' => [
                 'first' => 'Jean'.$index,
                 'last' => 'DUPONT'.$index,
-                'phone' => '+22890123456',
+                'phone' => sprintf('+22890%06d', $index),
                 'license' => 'LIC1234'.$index,
             ],
             'vehicle' => [
@@ -379,28 +379,200 @@ class DemandeRdvTest extends TestCase
         $this->assertDatabaseCount('demandes_rdv', 0);
     }
 
-    public function test_invalid_container_phone_and_missing_documents_are_rejected(): void
+    public function test_invalid_phone_and_missing_documents_are_rejected(): void
     {
         $user = $this->transporteur();
         $slot = $this->slot();
         $docs = $this->uploadDocuments($user);
 
         $payload = $this->payload($slot, ['docs' => $docs]);
-        $payload['trucks'][0]['container']['number'] = 'MSCU4829131';
         $payload['trucks'][0]['driver']['phone'] = '+228123';
 
         $response = $this->actingAs($user)->post(route('transporteur.demandes.store'), $payload);
 
-        $response->assertSessionHasErrors([
-            'trucks.0.container.number',
-            'trucks.0.driver.phone',
-        ]);
+        $response->assertSessionHasErrors(['trucks.0.driver.phone']);
 
         unset($docs['ta']);
 
         $this->actingAs($user)
             ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs]))
             ->assertSessionHasErrors('docs.ta');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_container_number_format_is_not_validated(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $payload = $this->payload($slot, ['docs' => $docs]);
+        $payload['trucks'][0]['container']['number'] = 'ABC123'; // format libre, hors ISO 6346
+
+        $response = $this->actingAs($user)->post(route('transporteur.demandes.store'), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $demande = DemandeRdv::firstOrFail();
+        $response->assertRedirect(route('transporteur.demandes.sent', $demande));
+        $this->assertDatabaseHas('demande_camions', ['container_number' => 'ABC123']);
+    }
+
+    public function test_container_number_is_required_except_for_empty_pickup(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $payload = $this->payload($slot, ['docs' => $docs]);
+        $payload['trucks'][0]['container']['number'] = '';
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $payload)
+            ->assertSessionHasErrors('trucks.0.container.number');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_empty_container_is_allowed_for_empty_pickup_operation(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $payload = $this->payload($slot, ['docs' => $docs, 'op' => 'MTP']);
+        $payload['trucks'][0]['container']['number'] = '';
+
+        $response = $this->actingAs($user)->post(route('transporteur.demandes.store'), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('demande_camions', ['container_number' => null]);
+    }
+
+    public function test_bill_of_lading_is_required_for_import(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $payload = $this->payload($slot, ['docs' => $docs]);
+        $payload['trucks'][0]['container']['bl'] = '';
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $payload)
+            ->assertSessionHasErrors('trucks.0.container.bl');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_bill_of_lading_format_is_not_validated(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $payload = $this->payload($slot, ['docs' => $docs]);
+        $payload['trucks'][0]['container']['bl'] = 'AB'; // trop court pour l'ancienne règle 6-20
+
+        $response = $this->actingAs($user)->post(route('transporteur.demandes.store'), $payload);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('demande_camions', ['container_bl' => 'AB']);
+    }
+
+    public function test_duplicate_phone_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[1]['driver']['phone'] = $trucks[0]['driver']['phone'];
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.driver.phone');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_duplicate_license_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[1]['driver']['license'] = $trucks[0]['driver']['license'];
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.driver.license');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_duplicate_tractor_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[1]['vehicle']['tractor'] = $trucks[0]['vehicle']['tractor'];
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.vehicle.tractor');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_duplicate_trailer_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[0]['vehicle']['trailer'] = 'TG 5678 CD';
+        $trucks[1]['vehicle']['trailer'] = 'TG 5678 CD';
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.vehicle.trailer');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_duplicate_container_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[1]['container']['number'] = $trucks[0]['container']['number'];
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.container.number');
+
+        $this->assertDatabaseCount('demandes_rdv', 0);
+    }
+
+    public function test_duplicate_bill_of_lading_across_trucks_is_rejected(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot(['capacity' => 10]);
+        $docs = $this->uploadDocuments($user);
+
+        $trucks = [$this->truck(1), $this->truck(2)];
+        $trucks[1]['container']['bl'] = $trucks[0]['container']['bl'];
+
+        $this->actingAs($user)
+            ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs, 'trucks' => $trucks]))
+            ->assertSessionHasErrors('trucks.1.container.bl');
 
         $this->assertDatabaseCount('demandes_rdv', 0);
     }

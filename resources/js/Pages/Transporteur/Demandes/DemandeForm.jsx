@@ -19,13 +19,11 @@ import {
 import { cn } from '@/Lib/cn';
 import { StepTrucks } from '@/features/transporteur/components/wizard/StepTrucks';
 import InertiaStepSlot from './InertiaStepSlot';
+import DemandeReview from './DemandeReview';
 import {
     COUNTRIES,
     DOCS,
     ISO_TYPES,
-    OPS,
-    TERMINALS,
-    fmtDayLong,
     fmtInt,
     formatPhone,
     normalizePlate,
@@ -36,6 +34,74 @@ import {
 import { fmtSize, newTruck, parseSlotKey, slotKey, splitPhone } from './helpers';
 
 const MAX_TRUCKS = 20;
+
+// Champs de camion exposés à StepTrucks (clé courte → suffixe du chemin d'erreur serveur).
+const TRUCK_ERROR_FIELDS = {
+    'driver.first': 'first',
+    'driver.last': 'last',
+    'driver.phone': 'phone',
+    'driver.license': 'license',
+    'vehicle.country': 'country',
+    'vehicle.tractor': 'tractor',
+    'vehicle.trailer': 'trailer',
+    'container.number': 'container',
+    'container.iso': 'iso',
+    'container.bl': 'bl',
+    'container.goods': 'goods',
+    'container.vgm': 'vgm',
+};
+
+// Champs qui ne peuvent pas être identiques entre deux camions d'une même demande.
+const TRUCK_UNIQUE_RULES = [
+    { field: 'driver.phone', value: (t) => (t.driver.phone_national.trim() ? toE164(t.driver.phone_cc, t.driver.phone_national) : ''), message: 'Ce numéro de téléphone est déjà utilisé pour un autre camion.' },
+    { field: 'driver.license', value: (t) => t.driver.license.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''), message: 'Ce n° de permis est déjà utilisé pour un autre camion.' },
+    { field: 'vehicle.tractor', value: (t) => normalizePlate(t.vehicle.tractor).trim(), message: 'Ce tracteur est déjà utilisé pour un autre camion.' },
+    { field: 'vehicle.trailer', value: (t) => normalizePlate(t.vehicle.trailer).trim(), message: 'Cette remorque est déjà utilisée pour un autre camion.' },
+    { field: 'container.number', value: (t) => parseContainer(t.container.number).raw, message: 'Ce conteneur est déjà saisi pour un autre camion.' },
+    { field: 'container.bl', value: (t) => parseBL(t.container.bl).raw, message: 'Ce n° de connaissement est déjà utilisé pour un autre camion.' },
+];
+
+// Conversion camion « formulaire » (imbriqué) ↔ camion « modèle » (plat, attendu par StepTrucks).
+const toTemplateTruck = (truck, index) => ({
+    k: truck.rdvId || `inertia-${index}`,
+    rdvId: truck.rdvId || null,
+    first: truck.driver.first,
+    last: truck.driver.last,
+    phoneCc: truck.driver.phone_cc,
+    phone: truck.driver.phone_national,
+    license: truck.driver.license,
+    country: truck.vehicle.country,
+    tractor: truck.vehicle.tractor,
+    trailer: truck.vehicle.trailer,
+    container: truck.container.number,
+    iso: truck.container.iso,
+    bl: truck.container.bl,
+    goods: truck.container.goods,
+    vgm: truck.container.vgm,
+});
+
+const formTruck = (truck) => ({
+    rdvId: truck.rdvId || null,
+    driver: {
+        first: truck.first || '',
+        last: truck.last || '',
+        phone_cc: truck.phoneCc || 'TG',
+        phone_national: truck.phone || '',
+        license: truck.license || '',
+    },
+    vehicle: {
+        country: truck.country || 'TG',
+        tractor: truck.tractor || '',
+        trailer: truck.trailer || '',
+    },
+    container: {
+        number: truck.container || '',
+        iso: truck.iso || '22G1',
+        bl: truck.bl || '',
+        goods: truck.goods || '',
+        vgm: truck.vgm ?? '',
+    },
+});
 
 function fromDemande(demande) {
     const mandated = splitPhone(demande.mandated?.phone);
@@ -149,23 +215,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         [slots, form.data.slot],
     );
 
-    const templateTrucks = useMemo(() => form.data.trucks.map((truck, index) => ({
-        k: truck.rdvId || `inertia-${index}`,
-        rdvId: truck.rdvId || null,
-        first: truck.driver.first,
-        last: truck.driver.last,
-        phoneCc: truck.driver.phone_cc,
-        phone: truck.driver.phone_national,
-        license: truck.driver.license,
-        country: truck.vehicle.country,
-        tractor: truck.vehicle.tractor,
-        trailer: truck.vehicle.trailer,
-        container: truck.container.number,
-        iso: truck.container.iso,
-        bl: truck.container.bl,
-        goods: truck.container.goods,
-        vgm: truck.container.vgm,
-    })), [form.data.trucks]);
+    const templateTrucks = useMemo(() => form.data.trucks.map(toTemplateTruck), [form.data.trucks]);
 
     const setTemplateTruck = (key, patch) => {
         form.setData((data) => ({
@@ -196,33 +246,19 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         }));
     };
 
-    const setTemplateForm = (patch) => {
-        if (!patch.trucks) return;
-        form.setData((data) => ({
-            ...data,
-            trucks: patch.trucks.map((truck) => ({
-                rdvId: truck.rdvId || null,
-                driver: {
-                    first: truck.first || '',
-                    last: truck.last || '',
-                    phone_cc: truck.phoneCc || 'TG',
-                    phone_national: truck.phone || '',
-                    license: truck.license || '',
-                },
-                vehicle: {
-                    country: truck.country || 'TG',
-                    tractor: truck.tractor || '',
-                    trailer: truck.trailer || '',
-                },
-                container: {
-                    number: truck.container || '',
-                    iso: truck.iso || '22G1',
-                    bl: truck.bl || '',
-                    goods: truck.goods || '',
-                    vgm: truck.vgm ?? '',
-                },
-            })),
-        }));
+    // `set` accepte un patch { trucks } ou un updater (comme l'ancien assistant) : StepTrucks ajoute,
+    // duplique, retire et importe des camions via une fonction (mise à jour sûre malgré des clics rapprochés).
+    const setTemplateForm = (patchOrUpdater) => {
+        form.setData((data) => {
+            const current = data.trucks.map(toTemplateTruck);
+            const patch = typeof patchOrUpdater === 'function'
+                ? patchOrUpdater({ trucks: current })
+                : patchOrUpdater;
+
+            if (!patch?.trucks) return data;
+
+            return { ...data, trucks: patch.trucks.map(formTruck) };
+        });
     };
 
     const patchTruck = (index, section, patch) => {
@@ -352,15 +388,39 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
     const needsBlAndGoods = ['IMP', 'EXP'].includes(form.data.op);
     const errors = Object.values(form.errors).filter((value) => typeof value === 'string');
 
-    const submit = (event) => {
-        event.preventDefault();
-        if (uploadingAny) return;
+    const truckErrors = templateTrucks.map((_, index) => {
+        const map = {};
+
+        Object.entries(TRUCK_ERROR_FIELDS).forEach(([suffix, field]) => {
+            const message = form.errors[`trucks.${index}.${suffix}`];
+            if (message) map[field] = message;
+        });
+
+        return map;
+    });
+
+    // L'envoi n'est déclenché QUE par un clic explicite sur « Envoyer la demande ».
+    // Aucune soumission native du formulaire ne doit pouvoir envoyer la demande.
+    const submit = () => {
+        if (step !== 3 || uploadingAny) return;
 
         if (mode === 'edit') {
             form.put(route('transporteur.demandes.update', demande.reference), { preserveScroll: true });
         } else {
             form.post(route('transporteur.demandes.store'), { preserveScroll: true });
         }
+    };
+
+    // Neutralise toute soumission native du formulaire (touche Entrée, bouton
+    // implicite, etc.) : le seul déclencheur d'envoi est le clic sur le bouton.
+    const blockNativeSubmit = (event) => event.preventDefault();
+
+    // Empêche l'envoi implicite du formulaire (touche Entrée) avant l'étape de
+    // vérification : l'utilisateur doit cliquer sur « Envoyer la demande ».
+    const onFormKeyDown = (event) => {
+        if (event.key !== 'Enter' || step >= 3) return;
+        if (event.target?.tagName === 'TEXTAREA') return;
+        event.preventDefault();
     };
 
     const goNext = () => {
@@ -370,18 +430,36 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
             return;
         }
         if (step === 1) {
+            const needsContainer = form.data.op !== 'MTP';
             const incomplete = form.data.trucks.findIndex((truck) => (
                 !truck.driver.first.trim()
                 || !truck.driver.last.trim()
                 || !truck.driver.phone_national.trim()
                 || !truck.driver.license.trim()
                 || !truck.vehicle.tractor.trim()
-                || (needsBlAndGoods && (!truck.container.number.trim() || !truck.container.bl.trim() || !truck.container.goods.trim()))
+                || (needsContainer && !truck.container.number.trim())
+                || (needsBlAndGoods && (!truck.container.bl.trim() || !truck.container.goods.trim()))
             ));
 
             if (incomplete >= 0) {
                 form.setError(`trucks.${incomplete}.driver.first`, 'Complétez les informations du camion.');
                 return;
+            }
+
+            for (const rule of TRUCK_UNIQUE_RULES) {
+                const seen = new Set();
+                const clash = form.data.trucks.findIndex((truck) => {
+                    const value = rule.value(truck);
+                    if (!value) return false;
+                    if (seen.has(value)) return true;
+                    seen.add(value);
+                    return false;
+                });
+
+                if (clash >= 0) {
+                    form.setError(`trucks.${clash}.${rule.field}`, rule.message);
+                    return;
+                }
             }
         }
         if (step === 2) {
@@ -400,31 +478,8 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         setStep((current) => Math.max(0, current - 1));
     };
 
-    const review = (
-        <div className="flex flex-col gap-4">
-            {[
-                ['Opération et créneau', `${OPS[form.data.op]?.label || form.data.op} · ${TERMINALS[form.data.terminal]?.label || form.data.terminal} · ${selectedSlot ? `${fmtDayLong(`${selectedSlot.date}T12:00:00Z`)} · ${selectedSlot.start}–${selectedSlot.end}` : 'Créneau non choisi'}`],
-                ['Camions', `${form.data.trucks.length} camion${form.data.trucks.length > 1 ? 's' : ''} déclaré${form.data.trucks.length > 1 ? 's' : ''}`],
-                ['Documents', `${DOCS.filter((doc) => form.data.docs[doc.key]).length}/${DOCS.length} documents déposés`],
-            ].map(([title, value], index) => (
-                <div key={title} className="rounded-2xl border border-slate-200 p-4">
-                    <div className="flex items-center justify-between gap-3">
-                        <div>
-                            <p className="text-sm font-semibold text-slate-900">{title}</p>
-                            <p className="mt-1 text-sm text-slate-600">{value}</p>
-                        </div>
-                        <Button type="button" size="sm" variant="ghost" icon="pencil" onClick={() => setStep(index)}>Modifier</Button>
-                    </div>
-                </div>
-            ))}
-            <Alert tone="info" title="Avant l’envoi">
-                La demande sera examinée par l’administration. Elle ne sera définitive qu’après validation.
-            </Alert>
-        </div>
-    );
-
     return (
-        <form onSubmit={submit} className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8">
+        <form onSubmit={blockNativeSubmit} onKeyDown={onFormKeyDown} className="grid gap-6 lg:grid-cols-[250px_minmax(0,1fr)] lg:gap-8">
             <aside>
                 <div className="hidden lg:sticky lg:top-24 lg:block">
                     <p className="mb-3 px-2 text-xs font-semibold uppercase tracking-[0.08em] text-brand-700">
@@ -595,7 +650,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                     f={{ mode: truckMode, op: form.data.op, trucks: templateTrucks }}
                     set={setTemplateForm}
                     setTruck={setTemplateTruck}
-                    e={templateTrucks.map(() => ({}))}
+                    e={truckErrors}
                 />
             </div>
             <div className="hidden">
@@ -937,7 +992,15 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
             </Card>
             </div>
 
-            {step === 3 ? review : null}
+            {step === 3 ? (
+                <DemandeReview
+                    data={form.data}
+                    selectedSlot={selectedSlot}
+                    isTransit={isTransit}
+                    uploaded={uploaded}
+                    onEdit={setStep}
+                />
+            ) : null}
 
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
                 <p className="text-sm text-slate-500">
@@ -953,7 +1016,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                     {step < 3 ? (
                         <Button type="button" icon="arrow-right" iconRight onClick={goNext}>Continuer</Button>
                     ) : (
-                        <Button type="submit" icon={mode === 'edit' ? 'check' : 'send'} loading={form.processing} disabled={uploadingAny}>
+                        <Button type="button" icon={mode === 'edit' ? 'check' : 'send'} loading={form.processing} disabled={uploadingAny} onClick={submit}>
                             {mode === 'edit' ? 'Enregistrer les modifications' : 'Envoyer la demande'}
                         </Button>
                     )}

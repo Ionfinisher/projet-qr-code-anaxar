@@ -22,7 +22,7 @@ export function PasswordInput({ id, value, onChange, autoComplete = 'current-pas
 /** Règles du mot de passe, cochées au fil de la saisie. */
 export function PasswordRules({ value, className }) {
   return (
-    <ul aria-label="Règles du mot de passe" className={cn('grid grid-cols-1 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-2', className)}>
+    <ul aria-label="Règles du mot de passe" className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm', className)}>
       {passwordChecks(value).map(c => (
         <li key={c.label} className={cn('flex items-center gap-2', c.ok ? 'text-emerald-700' : 'text-slate-500')}>
           <Icon name={c.ok ? 'circle-check' : 'circle'} size={15} /> {c.label}

@@ -77,6 +77,10 @@ abstract class DemandeRdvRequest extends FormRequest
 
             $containers = [];
             $tractors = [];
+            $trailers = [];
+            $phones = [];
+            $licenses = [];
+            $bls = [];
 
             foreach ($trucks as $index => $truck) {
                 if (! is_array($truck)) {
@@ -87,12 +91,19 @@ abstract class DemandeRdvRequest extends FormRequest
                 $vehicle = is_array($truck['vehicle'] ?? null) ? $truck['vehicle'] : [];
                 $containerData = is_array($truck['container'] ?? null) ? $truck['container'] : [];
 
-                $phone = $driver['phone'] ?? null;
-                if (! PhoneNumber::isValidE164(is_string($phone) ? $phone : null)) {
+                $phone = is_string($driver['phone'] ?? null) ? trim($driver['phone']) : null;
+                if (! PhoneNumber::isValidE164($phone)) {
                     $validator->errors()->add(
                         "trucks.{$index}.driver.phone",
                         'Numéro de téléphone invalide (format international E.164).'
                     );
+                } elseif (isset($phones[$phone])) {
+                    $validator->errors()->add(
+                        "trucks.{$index}.driver.phone",
+                        'Ce numéro de téléphone est déjà utilisé pour un autre camion.'
+                    );
+                } else {
+                    $phones[$phone] = true;
                 }
 
                 $license = $this->normalizeCode($driver['license'] ?? null);
@@ -101,6 +112,13 @@ abstract class DemandeRdvRequest extends FormRequest
                         "trucks.{$index}.driver.license",
                         'N° de permis invalide : 5 à 20 lettres ou chiffres, dont au moins un chiffre.'
                     );
+                } elseif (isset($licenses[$license])) {
+                    $validator->errors()->add(
+                        "trucks.{$index}.driver.license",
+                        'Ce n° de permis est déjà utilisé pour un autre camion.'
+                    );
+                } else {
+                    $licenses[$license] = true;
                 }
 
                 $tractor = $this->normalizePlate($vehicle['tractor'] ?? null);
@@ -124,40 +142,54 @@ abstract class DemandeRdvRequest extends FormRequest
                         "trucks.{$index}.vehicle.trailer",
                         'Immatriculation de la remorque invalide.'
                     );
+                } elseif ($trailer !== '' && isset($trailers[$trailer])) {
+                    $validator->errors()->add(
+                        "trucks.{$index}.vehicle.trailer",
+                        'Cette remorque est déjà utilisée pour un autre camion.'
+                    );
+                } elseif ($trailer !== '') {
+                    $trailers[$trailer] = true;
                 }
 
                 $container = ContainerNumber::normalize($containerData['number'] ?? '');
-                if (! ($operation === 'MTP' && $container === '')) {
-                    if (! ContainerNumber::isValid($container)) {
+
+                if ($container === '') {
+                    // Le numéro de conteneur est requis, sauf pour un retrait de vide (attribué par le terminal).
+                    if ($operation !== 'MTP') {
                         $validator->errors()->add(
                             "trucks.{$index}.container.number",
-                            'Numéro de conteneur invalide (ISO 6346).'
+                            'Numéro de conteneur requis.'
                         );
-                    } elseif (isset($containers[$container])) {
-                        $validator->errors()->add(
-                            "trucks.{$index}.container.number",
-                            'Ce conteneur est déjà saisi pour un autre camion.'
-                        );
-                    } else {
-                        $containers[$container] = true;
                     }
+                } elseif (isset($containers[$container])) {
+                    $validator->errors()->add(
+                        "trucks.{$index}.container.number",
+                        'Ce conteneur est déjà saisi pour un autre camion.'
+                    );
+                } else {
+                    $containers[$container] = true;
                 }
 
-                if (in_array($operation, ['IMP', 'EXP'], true)) {
-                    $bl = $this->normalizeCode($containerData['bl'] ?? null);
-                    if (strlen($bl) < 6 || strlen($bl) > 20) {
-                        $validator->errors()->add(
-                            "trucks.{$index}.container.bl",
-                            'Numéro de connaissement requis (6 à 20 caractères).'
-                        );
-                    }
+                $bl = $this->normalizeCode($containerData['bl'] ?? null);
+                if (in_array($operation, ['IMP', 'EXP'], true) && $bl === '') {
+                    $validator->errors()->add(
+                        "trucks.{$index}.container.bl",
+                        'Numéro de connaissement requis.'
+                    );
+                } elseif ($bl !== '' && isset($bls[$bl])) {
+                    $validator->errors()->add(
+                        "trucks.{$index}.container.bl",
+                        'Ce n° de connaissement est déjà utilisé pour un autre camion.'
+                    );
+                } elseif ($bl !== '') {
+                    $bls[$bl] = true;
+                }
 
-                    if (trim((string) ($containerData['goods'] ?? '')) === '') {
-                        $validator->errors()->add(
-                            "trucks.{$index}.container.goods",
-                            'La marchandise est requise.'
-                        );
-                    }
+                if (in_array($operation, ['IMP', 'EXP'], true) && trim((string) ($containerData['goods'] ?? '')) === '') {
+                    $validator->errors()->add(
+                        "trucks.{$index}.container.goods",
+                        'La marchandise est requise.'
+                    );
                 }
             }
 
