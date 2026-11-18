@@ -450,13 +450,14 @@ export default function Register({ pays = [], pieces = [], registration = null }
                     {/* Step 1: Contact & Sécurité */}
                     {step === 1 && (
                         <div className="flex flex-col gap-5">
-                            {editing && (
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <Field
                                     id="reg-email"
-                                    label="E-mail"
-                                    optional
+                                    label={editing ? 'E-mail' : 'Adresse e-mail professionnelle'}
+                                    required={!editing}
+                                    optional={editing}
                                     error={errors.email || stepErrors.email}
-                                    hint="Identifiant de connexion et réception des notifications."
+                                    hint={editing ? 'Identifiant de connexion et réception des notifications.' : 'Sera utilisée comme identifiant principal de connexion'}
                                 >
                                     <Input
                                         id="reg-email"
@@ -467,43 +468,43 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                         onChange={(e) => setData('email', e.target.value)}
                                     />
                                 </Field>
-                            )}
 
-                            <Field
-                                id="reg-phone"
-                                label="Téléphone mobile"
-                                required
-                                error={errors.phone_pays_id || errors.telephone || stepErrors.phone_pays_id || stepErrors.telephone}
-                                hint={editing ? 'Reçoit les SMS. Sert d’identifiant si aucun e-mail.' : 'Reçoit les SMS et sert d’identifiant de contact.'}
-                            >
-                                <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                                    <Select
-                                        id="reg-pays"
-                                        value={data.phone_pays_id || data.idpays}
-                                        onChange={(e) => setData('phone_pays_id', e.target.value)}
-                                        aria-label="Pays et indicatif téléphonique"
-                                        aria-invalid={errors.phone_pays_id || stepErrors.phone_pays_id ? 'true' : undefined}
-                                    >
-                                        <option value="" disabled>
-                                            Sélectionner un indicatif
-                                        </option>
-                                        {pays.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.nom} {p.indicatif ? `· +${String(p.indicatif).replace(/^\+/, '')}` : ''}
+                                <Field
+                                    id="reg-phone"
+                                    label="Téléphone mobile"
+                                    required
+                                    error={errors.phone_pays_id || errors.telephone || stepErrors.phone_pays_id || stepErrors.telephone}
+                                    hint={editing ? 'Reçoit les SMS. Sert d’identifiant si aucun e-mail.' : 'Reçoit les SMS et sert d’identifiant de contact.'}
+                                >
+                                    <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                                        <Select
+                                            id="reg-pays"
+                                            value={data.phone_pays_id || data.idpays}
+                                            onChange={(e) => setData('phone_pays_id', e.target.value)}
+                                            aria-label="Pays et indicatif téléphonique"
+                                            aria-invalid={errors.phone_pays_id || stepErrors.phone_pays_id ? 'true' : undefined}
+                                        >
+                                            <option value="" disabled>
+                                                Sélectionner un indicatif
                                             </option>
-                                        ))}
-                                    </Select>
-                                    <Input
-                                        id="reg-phone-number"
-                                        type="tel"
-                                        autoComplete="tel"
-                                        placeholder="90 11 22 33"
-                                        value={data.telephone}
-                                        onChange={(e) => setData('telephone', e.target.value)}
-                                        aria-invalid={errors.telephone || stepErrors.telephone ? 'true' : undefined}
-                                    />
-                                </div>
-                            </Field>
+                                            {pays.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.nom} {p.indicatif ? `· +${String(p.indicatif).replace(/^\+/, '')}` : ''}
+                                                </option>
+                                            ))}
+                                        </Select>
+                                        <Input
+                                            id="reg-phone-number"
+                                            type="tel"
+                                            autoComplete="tel"
+                                            placeholder="90 11 22 33"
+                                            value={data.telephone}
+                                            onChange={(e) => setData('telephone', e.target.value)}
+                                            aria-invalid={errors.telephone || stepErrors.telephone ? 'true' : undefined}
+                                        />
+                                    </div>
+                                </Field>
+                            </div>
 
                             {editing ? (
                                 <div className="flex flex-col gap-3">
@@ -546,23 +547,6 @@ export default function Register({ pays = [], pieces = [], registration = null }
                                 </div>
                             ) : (
                                 <>
-                                    <Field
-                                        id="reg-email"
-                                        label="Adresse e-mail professionnelle"
-                                        required
-                                        error={errors.email || stepErrors.email}
-                                        hint="Sera utilisée comme identifiant principal de connexion"
-                                    >
-                                        <Input
-                                            id="reg-email"
-                                            type="email"
-                                            autoComplete="username"
-                                            placeholder="contact@societe.tg"
-                                            value={data.email}
-                                            onChange={(e) => setData('email', e.target.value)}
-                                        />
-                                    </Field>
-
                                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                         <Field
                                             id="reg-pwd"
