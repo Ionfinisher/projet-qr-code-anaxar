@@ -13,6 +13,7 @@ class TemporaryUpload extends Model
     protected $fillable = [
         'token',
         'user_id',
+        'truck_key',
         'type',
         'original_name',
         'path',

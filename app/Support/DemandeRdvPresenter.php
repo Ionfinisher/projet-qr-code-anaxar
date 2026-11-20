@@ -7,6 +7,8 @@ use App\Models\DemandeDocument;
 use App\Models\DemandeEvenement;
 use App\Models\DemandeRdv;
 use App\Models\User;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 final class DemandeRdvPresenter
 {
@@ -40,17 +42,21 @@ final class DemandeRdvPresenter
     {
         $demande->loadMissing([
             'creneau',
-            'camions',
+            'camions.documents',
             'documents',
             'evenements.actor',
             'decideur',
             'user',
         ]);
 
-        $documents = $demande->documents
-            ->keyBy('type')
-            ->map(fn (DemandeDocument $document) => self::document($demande, $document, $viewer))
-            ->all();
+        $documentsByTruck = self::documentsByTruck($demande, $viewer);
+        $documents = [];
+
+        foreach ($documentsByTruck as $truckDocuments) {
+            foreach ($truckDocuments as $document) {
+                $documents[] = $document;
+            }
+        }
 
         $mandated = self::mandated($demande);
 
@@ -79,7 +85,7 @@ final class DemandeRdvPresenter
                 ? $demande->camions->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))->values()->all()
                 : [],
             'documents' => $documents,
-            'docs' => $documents,
+            'docs' => $documentsByTruck,
             'history' => $demande->evenements
                 ->sortBy('created_at')
                 ->values()
@@ -113,7 +119,7 @@ final class DemandeRdvPresenter
      */
     public static function form(DemandeRdv $demande): array
     {
-        $demande->loadMissing(['creneau', 'camions', 'documents']);
+        $demande->loadMissing(['creneau', 'camions.documents', 'documents']);
 
         return [
             'reference' => $demande->reference,
@@ -138,11 +144,42 @@ final class DemandeRdvPresenter
             'rdvs' => $demande->isApproved()
                 ? $demande->camions->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))->values()->all()
                 : [],
-            'docs' => $demande->documents
-                ->keyBy('type')
-                ->map(fn (DemandeDocument $document) => self::document($demande, $document))
-                ->all(),
+            'docs' => self::documentsByTruck($demande),
         ];
+    }
+
+    /**
+     * Documents indexés par identifiant de camion puis par type.
+     *
+     * @return array<string, array<string, array<string, mixed>>>
+     */
+    private static function documentsByTruck(DemandeRdv $demande, ?User $viewer = null): array
+    {
+        $documents = [];
+
+        foreach ($demande->camions as $camion) {
+            $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : collect();
+
+            $documents[(string) $camion->id] = $camionDocuments
+                ->keyBy('type')
+                ->map(fn (DemandeDocument $document) => self::document($demande, $document, $viewer))
+                ->all();
+        }
+
+        // Les demandes historiques peuvent contenir des documents non rattachés
+        // à un camion : ils restent lisibles mais ne sont pas modifiables.
+        $legacy = $demande->relationLoaded('documents')
+            ? $demande->documents->filter(fn (DemandeDocument $document) => $document->demande_camion_id === null)
+            : $demande->documents()->whereNull('demande_camion_id')->get();
+
+        if ($legacy->isNotEmpty()) {
+            $documents['legacy'] = $legacy
+                ->keyBy('type')
+                ->map(fn (DemandeDocument $document) => self::document($demande, $document, $viewer))
+                ->all();
+        }
+
+        return $documents;
     }
 
     /**
@@ -201,12 +238,13 @@ final class DemandeRdvPresenter
     public static function rdv(DemandeCamion $camion, ?DemandeRdv $demande = null): array
     {
         $demande = $demande ?? $camion->demande;
-        $demande->loadMissing(['creneau', 'user', 'documents']);
+        $demande->loadMissing(['creneau', 'user', 'camions.documents']);
 
         $rdvId = 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6));
         $token = self::generateToken($demande, $camion);
 
-        $docsMap = $demande->documents->keyBy('type')->map(fn (DemandeDocument $doc) => [
+        $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : $camion->documents()->get();
+        $docsMap = $camionDocuments->keyBy('type')->map(fn (DemandeDocument $doc) => [
             'id' => $doc->id,
             'name' => $doc->original_name,
             'size' => $doc->size,
@@ -287,8 +325,8 @@ final class DemandeRdvPresenter
         $slt = str_replace('-', '', $slotDate) . str_replace(':', '', $slotStart) . '-' . str_replace(':', '', $slotEnd);
 
         $docHashes = [];
-        $demande->loadMissing('documents');
-        $docsByType = $demande->documents->keyBy('type');
+        $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : $camion->documents()->get();
+        $docsByType = $camionDocuments->keyBy('type');
         foreach (DemandeRdv::DOC_TYPES as $type) {
             $doc = $docsByType->get($type);
             $docHashes[] = $doc ? substr($doc->sha256, 0, 8) : '';
@@ -319,9 +357,14 @@ final class DemandeRdvPresenter
             $claims['lot'] = "{$demande->reference}/{$camion->position}-{$demande->trucks_count}";
         }
 
+        $signingKey = (string) config('app.key');
+        if ($signingKey === '') {
+            throw new RuntimeException('APP_KEY doit être configurée pour signer les QR de rendez-vous.');
+        }
+
         $h64 = self::base64UrlEncode((string) json_encode($header, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         $p64 = self::base64UrlEncode((string) json_encode($claims, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
-        $sig = self::base64UrlEncode(hash_hmac('sha256', "{$h64}.{$p64}", (string) config('app.key', 'portflow-secret'), true));
+        $sig = self::base64UrlEncode(hash_hmac('sha256', "{$h64}.{$p64}", $signingKey, true));
 
         return "{$h64}.{$p64}.{$sig}";
     }
@@ -342,6 +385,7 @@ final class DemandeRdvPresenter
 
         return [
             'id' => $document->id,
+            'camion_id' => $document->demande_camion_id,
             'type' => $document->type,
             'name' => $document->original_name,
             'size' => $document->size,
@@ -349,6 +393,18 @@ final class DemandeRdvPresenter
             'sha256' => $document->sha256,
             'url' => $url,
         ];
+    }
+
+    /**
+     * Nom de fichier sûr pour le téléchargement (en-tête Content-Disposition).
+     */
+    public static function downloadName(DemandeDocument $document): string
+    {
+        $name = Str::ascii(basename($document->original_name));
+        $name = (string) preg_replace('/[^\w.\- ]/', '_', $name);
+        $name = trim($name);
+
+        return $name !== '' && $name !== '.' && $name !== '..' ? $name : 'document';
     }
 
     /**

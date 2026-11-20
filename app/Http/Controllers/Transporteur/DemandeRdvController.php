@@ -87,7 +87,7 @@ class DemandeRdvController extends Controller
 
         if (is_string($reference) && $reference !== '') {
             $selectedDemande = $user->demandesRdv()
-                ->with(['creneau', 'camions', 'documents', 'evenements.actor', 'decideur'])
+                ->with(['creneau', 'camions.documents', 'documents', 'evenements.actor', 'decideur'])
                 ->where('reference', $reference)
                 ->first();
 
@@ -117,7 +117,7 @@ class DemandeRdvController extends Controller
     {
         $this->authorize('view', $demande);
 
-        $demande->load(['creneau', 'camions', 'documents', 'evenements.actor', 'decideur', 'user']);
+        $demande->load(['creneau', 'camions.documents', 'evenements.actor', 'decideur', 'user']);
 
         return Inertia::render('Transporteur/Demandes/Show', [
             'demande' => DemandeRdvPresenter::detail(
@@ -163,7 +163,7 @@ class DemandeRdvController extends Controller
         $demande = $this->service->create($request->user(), $request->validated());
 
         return redirect()
-            ->route('transporteur.demandes.sent', $demande)
+            ->route('transporteur.demandes.index')
             ->with('success', 'Votre demande de rendez-vous a été envoyée.');
     }
 
@@ -171,7 +171,7 @@ class DemandeRdvController extends Controller
     {
         $this->authorize('update', $demande);
 
-        $demande->load(['creneau', 'camions', 'documents']);
+        $demande->load(['creneau', 'camions.documents']);
 
         return Inertia::render('Transporteur/Demandes/Edit', [
             'demande' => DemandeRdvPresenter::form($demande),
@@ -190,7 +190,7 @@ class DemandeRdvController extends Controller
         $this->service->update($demande, $request->validated(), $request->user());
 
         return redirect()
-            ->route('transporteur.demandes.sent', ['demande' => $demande, 'edited' => 1])
+            ->route('transporteur.demandes.index')
             ->with('success', 'Votre demande a été mise à jour.');
     }
 
@@ -205,7 +205,7 @@ class DemandeRdvController extends Controller
     {
         $this->authorize('view', $demande);
 
-        $demande->load(['creneau', 'camions', 'documents', 'evenements.actor', 'decideur']);
+        $demande->load(['creneau', 'camions.documents', 'evenements.actor', 'decideur']);
 
         return Inertia::render('Transporteur/Demandes/Sent', [
             'demande' => DemandeRdvPresenter::detail(

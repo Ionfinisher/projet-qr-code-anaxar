@@ -12,6 +12,7 @@ class DemandeDocument extends Model
 
     protected $fillable = [
         'demande_rdv_id',
+        'demande_camion_id',
         'type',
         'original_name',
         'path',
@@ -27,5 +28,10 @@ class DemandeDocument extends Model
     public function demande(): BelongsTo
     {
         return $this->belongsTo(DemandeRdv::class, 'demande_rdv_id');
+    }
+
+    public function camion(): BelongsTo
+    {
+        return $this->belongsTo(DemandeCamion::class, 'demande_camion_id');
     }
 }

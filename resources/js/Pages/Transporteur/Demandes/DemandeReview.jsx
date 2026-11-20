@@ -13,6 +13,7 @@ import {
     parseContainer,
     toE164,
 } from '@/Lib/domain';
+import { docSlot } from './helpers';
 
 const dash = (value) => (value === null || value === undefined || String(value).trim() === '' ? '—' : value);
 
@@ -104,7 +105,10 @@ export default function DemandeReview({ data, selectedSlot, isTransit, uploaded,
         ? `${fmtDayLong(`${selectedSlot.date}T12:00:00Z`)} · ${selectedSlot.start}–${selectedSlot.end}`
         : 'Créneau non choisi';
 
-    const provided = DOCS.filter((doc) => data.docs[doc.key]).length;
+    const provided = (data.trucks || []).reduce((total, truck) => (
+        total + DOCS.filter((doc) => data.docs?.[String(truck.key)]?.[doc.key]).length
+    ), 0);
+    const expected = (data.trucks || []).length * DOCS.length;
 
     const mandatedName = data.mandated.type === 'entreprise'
         ? data.mandated.company.trim()
@@ -145,30 +149,50 @@ export default function DemandeReview({ data, selectedSlot, isTransit, uploaded,
             </ReviewSection>
 
             <ReviewSection
-                title="Documents"
+                title="Documents par camion"
                 icon="file-up"
                 step={2}
                 onEdit={onEdit}
-                aside={<Badge tone={provided === DOCS.length ? 'ok' : 'neutral'}>{provided}/{DOCS.length}</Badge>}
+                aside={<Badge tone={provided === expected ? 'ok' : 'neutral'}>{provided}/{expected}</Badge>}
             >
-                <ul className="flex flex-col gap-2">
-                    {DOCS.map((doc) => {
-                        const ok = Boolean(data.docs[doc.key]);
-                        const meta = uploaded?.[doc.key];
+                <div className="flex flex-col gap-4">
+                    {(data.trucks || []).map((truck, index) => {
+                        const truckKey = String(truck.key);
+                        const count = DOCS.filter((doc) => data.docs?.[truckKey]?.[doc.key]).length;
 
                         return (
-                            <li key={doc.key} className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                                <span className="flex min-w-0 items-center gap-2">
-                                    <Icon name={ok ? 'circle-check' : 'circle'} size={16} className={ok ? 'text-emerald-600' : 'text-slate-400'} />
-                                    <span className="truncate text-sm text-slate-800">{doc.label}</span>
-                                </span>
-                                <span className={cn('shrink-0 text-xs', ok ? 'text-slate-500' : 'font-medium text-rose-700')}>
-                                    {meta?.name || (ok ? 'Déposé' : 'Manquant')}
-                                </span>
-                            </li>
+                            <div key={truckKey} className="rounded-xl border border-slate-200 bg-white p-3">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                        Camion {index + 1}
+                                        {truck.vehicle?.tractor ? (
+                                            <span className="ml-2 font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
+                                        ) : null}
+                                    </p>
+                                    <Badge tone={count === DOCS.length ? 'ok' : 'neutral'}>{count}/{DOCS.length}</Badge>
+                                </div>
+                                <ul className="flex flex-col gap-1.5">
+                                    {DOCS.map((doc) => {
+                                        const ok = Boolean(data.docs?.[truckKey]?.[doc.key]);
+                                        const meta = uploaded?.[docSlot(truckKey, doc.key)];
+
+                                        return (
+                                            <li key={doc.key} className="flex items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-1.5">
+                                                <span className="flex min-w-0 items-center gap-2">
+                                                    <Icon name={ok ? 'circle-check' : 'circle'} size={16} className={ok ? 'text-emerald-600' : 'text-slate-400'} />
+                                                    <span className="truncate text-sm text-slate-800">{doc.label}</span>
+                                                </span>
+                                                <span className={cn('shrink-0 text-xs', ok ? 'text-slate-500' : 'font-medium text-rose-700')}>
+                                                    {meta?.name || (ok ? 'Déposé' : 'Manquant')}
+                                                </span>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            </div>
                         );
                     })}
-                </ul>
+                </div>
             </ReviewSection>
 
             <Alert tone="info" title="Note">

@@ -195,33 +195,76 @@ export default function DemandeDetail({ demande, actions = null }) {
             </Card>
 
             <Card>
-                <SectionTitle icon="file-text">Documents</SectionTitle>
-                <div className="grid gap-2 sm:grid-cols-2">
-                    {DOCS.map((doc) => {
-                        const file = demande.documents?.[doc.key];
+                <SectionTitle icon="file-text">Documents par camion</SectionTitle>
+                <div className="flex flex-col gap-4">
+                    {(demande.trucks || []).map((truck, index) => {
+                        const docs = demande.docs?.[String(truck.id)] || {};
 
                         return (
-                            <div key={doc.key} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
-                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                                    <Icon name={doc.icon} size={17} />
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                    <p className="truncate text-sm font-medium text-slate-800">{doc.label}</p>
-                                    <p className="truncate text-xs text-slate-500">
-                                        {file ? `${file.name} · ${fmtSize(file.size)}` : 'Non fourni'}
-                                    </p>
+                            <div key={truck.id} className="rounded-xl border border-slate-200 p-3">
+                                <p className="mb-2 text-sm font-semibold text-slate-900">
+                                    Camion {index + 1}
+                                    {truck.vehicle?.tractor ? (
+                                        <span className="ml-2 font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
+                                    ) : null}
+                                </p>
+                                <div className="grid gap-2 sm:grid-cols-2">
+                                    {DOCS.map((doc) => {
+                                        const file = docs[doc.key];
+
+                                        return (
+                                            <div key={doc.key} className="flex items-center gap-3 rounded-xl border border-slate-200 p-3">
+                                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                                                    <Icon name={doc.icon} size={17} />
+                                                </span>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="truncate text-sm font-medium text-slate-800">{doc.label}</p>
+                                                    <p className="truncate text-xs text-slate-500">
+                                                        {file ? `${file.name} · ${fmtSize(file.size)}` : 'Non fourni'}
+                                                    </p>
+                                                </div>
+                                                {file ? (
+                                                    <a
+                                                        href={file.url}
+                                                        className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 hover:underline"
+                                                    >
+                                                        Télécharger
+                                                    </a>
+                                                ) : null}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
-                                {file ? (
-                                    <a
-                                        href={file.url}
-                                        className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 hover:underline"
-                                    >
-                                        Télécharger
-                                    </a>
-                                ) : null}
                             </div>
                         );
                     })}
+
+                    {(demande.documents || []).some((file) => file.camion_id === null) ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+                            <p className="mb-2 text-sm font-semibold text-amber-900">Documents hérités (sans camion)</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                                {(demande.documents || []).filter((file) => file.camion_id === null).map((file) => (
+                                    <div key={file.id} className="flex items-center gap-3 rounded-xl border border-amber-200 bg-white p-3">
+                                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700">
+                                            <Icon name="file-text" size={17} />
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium text-slate-800">{file.name}</p>
+                                            <p className="truncate text-xs text-slate-500">
+                                                {DOCS.find((doc) => doc.key === file.type)?.label || file.type} · {fmtSize(file.size)}
+                                            </p>
+                                        </div>
+                                        <a
+                                            href={file.url}
+                                            className="shrink-0 rounded-lg px-2 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 hover:underline"
+                                        >
+                                            Télécharger
+                                        </a>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </Card>
 

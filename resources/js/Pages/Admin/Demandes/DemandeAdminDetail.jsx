@@ -25,7 +25,64 @@ import { Icon } from '@/Components/ui/Icon';
 import { Modal } from '@/Components/ui/Overlay';
 import { Field, Select, Textarea } from '@/Components/ui/Field';
 import { StatusTag, ContainerNumber, Plate, HistoryTimeline, GatePass, PassActions } from '@/Components/domain';
-import { UrgencyBadge, DecisionBar, calculateDemandeChecks } from './DemandesParts';
+import {
+    UrgencyBadge,
+    DecisionBar,
+    calculateDemandeChecks,
+    documentsByTruckMap,
+    legacyDocuments,
+} from './DemandesParts';
+
+function DocumentLine({ docDef, meta }) {
+    return (
+        <li className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+            <div className="flex items-start gap-3">
+                <span
+                    className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        meta ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                    }`}
+                >
+                    <Icon name={meta ? 'file-check' : 'file-x'} size={18} />
+                </span>
+                <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{docDef.label}</p>
+                    <p className="mt-0.5 flex flex-wrap gap-x-2 text-[13px] text-slate-500">
+                        {meta ? (
+                            <>
+                                <span className="truncate">{meta.name}</span>
+                                {meta.size > 0 && <span>{fmtSize(meta.size)}</span>}
+                                {meta.sha256 && (
+                                    <span className="font-mono text-xs">
+                                        SHA-256 {meta.sha256.slice(0, 10)}…
+                                    </span>
+                                )}
+                            </>
+                        ) : (
+                            <span>Non fournie</span>
+                        )}
+                    </p>
+                </div>
+            </div>
+            <div>
+                {meta?.url ? (
+                    <a
+                        href={meta.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                        <Icon name="download" size={14} />
+                        <span>Télécharger</span>
+                    </a>
+                ) : (
+                    <Badge tone="warn" icon="triangle-alert">
+                        Manquante
+                    </Badge>
+                )}
+            </div>
+        </li>
+    );
+}
 
 export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
     const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
@@ -46,7 +103,13 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
     const termLabel = TERMINALS[d.terminal]?.label || d.terminal;
     const slot = d.slot;
     const usage = d.usage;
-    const docsMap = d.documents || d.docs || {};
+    const docsByTruck = documentsByTruckMap(d);
+    const inheritedDocs = legacyDocuments(d);
+    const docsFor = (truckId) => docsByTruck[String(truckId)] || {};
+    const countUploadedDocs = trucks.reduce((sum, truck) => (
+        sum + DOCS.filter((def) => docsFor(truck.id)[def.key]).length
+    ), 0) + (trucks.length ? 0 : DOCS.filter((def) => docsByTruck.legacy?.[def.key]).length);
+    const totalDocs = Math.max(trucks.length, 1) * DOCS.length;
     const isPending = d.status === 'en_attente';
 
     const handleApprove = () => {
@@ -87,8 +150,6 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
             }
         );
     };
-
-    const countUploadedDocs = DOCS.filter((def) => !!docsMap[def.key]).length;
 
     return (
         <div className="flex flex-col gap-6">
@@ -402,75 +463,75 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                     icon="file-check"
                     aside={
                         <span className="text-[13px] tabular-nums text-slate-500">
-                            {countUploadedDocs}/6
+                            {countUploadedDocs}/{totalDocs}
                         </span>
                     }
                 >
-                    Documents déposés
+                    Documents déposés par camion
                 </SectionTitle>
 
-                <ul className="flex flex-col divide-y divide-slate-100">
-                    {DOCS.map((docDef) => {
-                        const meta = docsMap[docDef.key];
+                <div className="flex flex-col gap-5">
+                    {trucks.map((truck, index) => {
+                        const docs = docsFor(truck.id);
+                        const count = DOCS.filter((def) => docs[def.key]).length;
+
                         return (
-                            <li
-                                key={docDef.key}
-                                className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
-                            >
-                                <div className="flex items-start gap-3">
-                                    <span
-                                        className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                                            meta
-                                                ? 'bg-emerald-50 text-emerald-700'
-                                                : 'bg-amber-50 text-amber-700'
-                                        }`}
-                                    >
-                                        <Icon name={meta ? 'file-check' : 'file-x'} size={18} />
-                                    </span>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-slate-900">
-                                            {docDef.label}
-                                        </p>
-                                        <p className="mt-0.5 flex flex-wrap gap-x-2 text-[13px] text-slate-500">
-                                            {meta ? (
-                                                <>
-                                                    <span className="truncate">{meta.name}</span>
-                                                    {meta.size > 0 && (
-                                                        <span>{fmtSize(meta.size)}</span>
-                                                    )}
-                                                    {meta.sha256 && (
-                                                        <span className="font-mono text-xs">
-                                                            SHA-256 {meta.sha256.slice(0, 10)}…
-                                                        </span>
-                                                    )}
-                                                </>
-                                            ) : (
-                                                <span>Non fournie</span>
-                                            )}
-                                        </p>
-                                    </div>
+                            <section key={truck.id} className="rounded-2xl border border-slate-200 p-3">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                        Camion {index + 1}
+                                        {truck.vehicle?.tractor ? (
+                                            <span className="ml-2 font-mono text-xs text-slate-500">
+                                                {truck.vehicle.tractor}
+                                            </span>
+                                        ) : null}
+                                    </p>
+                                    <Badge tone={count === DOCS.length ? 'ok' : 'neutral'}>
+                                        {count}/{DOCS.length}
+                                    </Badge>
                                 </div>
-                                <div>
-                                    {meta?.url ? (
-                                        <a
-                                            href={meta.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
-                                        >
-                                            <Icon name="download" size={14} />
-                                            <span>Télécharger</span>
-                                        </a>
-                                    ) : (
-                                        <Badge tone="warn" icon="triangle-alert">
-                                            Manquante
-                                        </Badge>
-                                    )}
-                                </div>
-                            </li>
+                                <ul className="flex flex-col divide-y divide-slate-100">
+                                    {DOCS.map((docDef) => (
+                                        <DocumentLine
+                                            key={docDef.key}
+                                            docDef={docDef}
+                                            meta={docs[docDef.key]}
+                                        />
+                                    ))}
+                                </ul>
+                            </section>
                         );
                     })}
-                </ul>
+
+                    {inheritedDocs.length ? (
+                        <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-3">
+                            <p className="mb-2 text-sm font-semibold text-amber-900">
+                                Documents hérités (sans camion)
+                            </p>
+                            <ul className="flex flex-col divide-y divide-amber-100">
+                                {inheritedDocs.map((file) => (
+                                    <DocumentLine
+                                        key={file.id}
+                                        docDef={{ key: file.type, label: DOCS.find((doc) => doc.key === file.type)?.label || file.type }}
+                                        meta={file}
+                                    />
+                                ))}
+                            </ul>
+                        </section>
+                    ) : null}
+
+                    {!trucks.length && !inheritedDocs.length ? (
+                        <ul className="flex flex-col divide-y divide-slate-100">
+                            {DOCS.map((docDef) => (
+                                <DocumentLine
+                                    key={docDef.key}
+                                    docDef={docDef}
+                                    meta={docsByTruck.legacy?.[docDef.key]}
+                                />
+                            ))}
+                        </ul>
+                    ) : null}
+                </div>
             </Card>
 
             {/* Historique */}
