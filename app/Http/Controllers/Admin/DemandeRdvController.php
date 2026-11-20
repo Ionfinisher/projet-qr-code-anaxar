@@ -43,7 +43,7 @@ class DemandeRdvController extends Controller
             ->with([
                 'user',
                 'creneau',
-                'camions',
+                'camions.documents',
                 'documents',
                 'evenements.actor',
                 'decideur',
@@ -197,11 +197,16 @@ class DemandeRdvController extends Controller
     public function downloadDocument(DemandeRdv $demande, DemandeDocument $document): StreamedResponse
     {
         abort_unless($document->demande_rdv_id === $demande->id, 404);
+        abort_unless(
+            $document->demande_camion_id === null
+                || $document->camion?->demande_rdv_id === $demande->id,
+            404
+        );
         abort_unless(Storage::disk('local')->exists($document->path), 404);
 
         return Storage::disk('local')->download(
             $document->path,
-            basename($document->original_name),
+            DemandeRdvPresenter::downloadName($document),
             ['Content-Type' => $document->mime]
         );
     }

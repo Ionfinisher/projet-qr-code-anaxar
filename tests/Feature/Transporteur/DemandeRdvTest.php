@@ -47,20 +47,35 @@ class DemandeRdvTest extends TestCase
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, array<string, string>>
      */
-    private function uploadDocuments(User $user): array
+    private function uploadDocuments(User $user, string $truckKey = 'truck-1'): array
     {
         $docs = [];
 
         foreach (DemandeRdv::DOC_TYPES as $type) {
             $response = $this->actingAs($user)->post(route('transporteur.uploads.store'), [
                 'type' => $type,
+                'truck_key' => $truckKey,
                 'file' => UploadedFile::fake()->create($type.'.pdf', 50, 'application/pdf'),
             ]);
 
             $response->assertCreated();
-            $docs[$type] = $response->json('token');
+            $docs[$truckKey][$type] = $response->json('token');
+        }
+
+        return $docs;
+    }
+
+    /**
+     * @return array<string, array<string, string>>
+     */
+    private function uploadDocumentsForTrucks(User $user, int $count): array
+    {
+        $docs = [];
+
+        for ($index = 1; $index <= $count; $index++) {
+            $docs = array_merge($docs, $this->uploadDocuments($user, 'truck-'.$index));
         }
 
         return $docs;
@@ -75,6 +90,8 @@ class DemandeRdvTest extends TestCase
         $container = $containers[($index - 1) % count($containers)];
 
         return [
+            'key' => 'truck-'.$index,
+            'rdvId' => null,
             'driver' => [
                 'first' => 'Jean'.$index,
                 'last' => 'DUPONT'.$index,
@@ -122,12 +139,15 @@ class DemandeRdvTest extends TestCase
 
     private function attachDocuments(DemandeRdv $demande): void
     {
+        $camion = $demande->camions()->firstOrFail();
+
         foreach (DemandeRdv::DOC_TYPES as $type) {
             $content = 'doc-'.$type;
-            $path = "rendez-vous/{$demande->id}/{$type}.pdf";
+            $path = "rendez-vous/{$demande->id}/{$camion->id}/{$type}.pdf";
             Storage::disk('local')->put($path, $content);
 
             $demande->documents()->create([
+                'demande_camion_id' => $camion->id,
                 'type' => $type,
                 'original_name' => $type.'.pdf',
                 'path' => $path,
@@ -139,11 +159,32 @@ class DemandeRdvTest extends TestCase
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, array<string, int>>
      */
     private function documentIds(DemandeRdv $demande): array
     {
-        return $demande->documents()->pluck('id', 'type')->all();
+        $docs = [];
+
+        foreach ($demande->camions as $camion) {
+            $docs[(string) $camion->id] = $demande->documents()
+                ->where('demande_camion_id', $camion->id)
+                ->pluck('id', 'type')
+                ->all();
+        }
+
+        return $docs;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function truckFromCamion(DemandeCamion $camion): array
+    {
+        $truck = $this->truck($camion->position);
+        $truck['key'] = (string) $camion->id;
+        $truck['rdvId'] = $camion->id;
+
+        return $truck;
     }
 
     public function test_guest_cannot_access_transporteur_space(): void
@@ -288,7 +329,7 @@ class DemandeRdvTest extends TestCase
 
         $demande = DemandeRdv::firstOrFail();
 
-        $response->assertRedirect(route('transporteur.demandes.sent', $demande));
+        $response->assertRedirect(route('transporteur.demandes.index'));
         $response->assertSessionHas('success');
 
         $this->assertDatabaseHas('demandes_rdv', [
@@ -316,7 +357,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $response = $this->actingAs($user)->post(
             route('transporteur.demandes.store'),
@@ -328,7 +369,7 @@ class DemandeRdvTest extends TestCase
 
         $demande = DemandeRdv::firstOrFail();
 
-        $response->assertRedirect(route('transporteur.demandes.sent', $demande));
+        $response->assertRedirect(route('transporteur.demandes.index'));
         $this->assertSame(2, $demande->trucks_count);
         $this->assertSame(2, $demande->camions()->count());
         $this->assertDatabaseHas('demande_camions', [
@@ -392,11 +433,11 @@ class DemandeRdvTest extends TestCase
 
         $response->assertSessionHasErrors(['trucks.0.driver.phone']);
 
-        unset($docs['ta']);
+        unset($docs['truck-1']['ta']);
 
         $this->actingAs($user)
             ->post(route('transporteur.demandes.store'), $this->payload($slot, ['docs' => $docs]))
-            ->assertSessionHasErrors('docs.ta');
+            ->assertSessionHasErrors('docs.truck-1.ta');
 
         $this->assertDatabaseCount('demandes_rdv', 0);
     }
@@ -414,7 +455,7 @@ class DemandeRdvTest extends TestCase
 
         $response->assertSessionHasNoErrors();
         $demande = DemandeRdv::firstOrFail();
-        $response->assertRedirect(route('transporteur.demandes.sent', $demande));
+        $response->assertRedirect(route('transporteur.demandes.index'));
         $this->assertDatabaseHas('demande_camions', ['container_number' => 'ABC123']);
     }
 
@@ -484,7 +525,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[1]['driver']['phone'] = $trucks[0]['driver']['phone'];
@@ -500,7 +541,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[1]['driver']['license'] = $trucks[0]['driver']['license'];
@@ -516,7 +557,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[1]['vehicle']['tractor'] = $trucks[0]['vehicle']['tractor'];
@@ -532,7 +573,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[0]['vehicle']['trailer'] = 'TG 5678 CD';
@@ -549,7 +590,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[1]['container']['number'] = $trucks[0]['container']['number'];
@@ -565,7 +606,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $slot = $this->slot(['capacity' => 10]);
-        $docs = $this->uploadDocuments($user);
+        $docs = $this->uploadDocumentsForTrucks($user, 2);
 
         $trucks = [$this->truck(1), $this->truck(2)];
         $trucks[1]['container']['bl'] = $trucks[0]['container']['bl'];
@@ -587,15 +628,20 @@ class DemandeRdvTest extends TestCase
         DemandeCamion::factory()->forDemande($demande, 1)->create();
         $this->attachDocuments($demande);
 
+        $camion = $demande->camions()->firstOrFail();
+        // L'union (plutôt que array_merge) préserve la clé numérique du camion existant.
+        $docs = $this->documentIds($demande) + $this->uploadDocuments($user, 'truck-2');
+
         $response = $this->actingAs($user)->put(
             route('transporteur.demandes.update', $demande),
             $this->payload($newSlot, [
-                'docs' => $this->documentIds($demande),
-                'trucks' => [$this->truck(1), $this->truck(2)],
+                'docs' => $docs,
+                'trucks' => [$this->truckFromCamion($camion), $this->truck(2)],
             ])
         );
 
-        $response->assertRedirect(route('transporteur.demandes.sent', ['demande' => $demande, 'edited' => 1]));
+        $response->assertSessionHasNoErrors();
+        $response->assertRedirect(route('transporteur.demandes.index'));
         $response->assertSessionHas('success');
 
         $this->assertDatabaseHas('demandes_rdv', [
@@ -604,7 +650,9 @@ class DemandeRdvTest extends TestCase
             'trucks_count' => 2,
         ]);
         $this->assertSame(2, $demande->camions()->count());
-        $this->assertSame(6, $demande->documents()->count());
+        $this->assertSame(12, $demande->documents()->count());
+        $this->assertSame($camion->id, $demande->camions()->orderBy('position')->firstOrFail()->id);
+        $this->assertSame(6, $demande->documents()->where('demande_camion_id', $camion->id)->count());
         $this->assertDatabaseHas('demande_evenements', [
             'demande_rdv_id' => $demande->id,
             'type' => 'modifiee',
@@ -659,6 +707,7 @@ class DemandeRdvTest extends TestCase
         $owner = $this->transporteur();
         $intruder = $this->transporteur();
         $demande = DemandeRdv::factory()->forUser($owner)->forCreneau($this->slot())->create();
+        DemandeCamion::factory()->forDemande($demande)->create();
         $this->attachDocuments($demande);
         $document = $demande->documents()->firstOrFail();
 
@@ -679,6 +728,7 @@ class DemandeRdvTest extends TestCase
     {
         $user = $this->transporteur();
         $demande = DemandeRdv::factory()->forUser($user)->forCreneau($this->slot())->create();
+        DemandeCamion::factory()->forDemande($demande)->create();
         $this->attachDocuments($demande);
         $document = $demande->documents()->where('type', 'bc')->firstOrFail();
 
@@ -694,11 +744,13 @@ class DemandeRdvTest extends TestCase
 
         $this->actingAs($user)->post(route('transporteur.uploads.store'), [
             'type' => 'bc',
+            'truck_key' => 'truck-1',
             'file' => UploadedFile::fake()->create('virus.exe', 10, 'application/x-msdownload'),
         ])->assertSessionHasErrors('file');
 
         $this->actingAs($user)->post(route('transporteur.uploads.store'), [
             'type' => 'bc',
+            'truck_key' => 'truck-1',
             'file' => UploadedFile::fake()->create('big.pdf', 11000, 'application/pdf'),
         ])->assertSessionHasErrors('file');
     }
@@ -710,6 +762,7 @@ class DemandeRdvTest extends TestCase
 
         $response = $this->actingAs($owner)->post(route('transporteur.uploads.store'), [
             'type' => 'bc',
+            'truck_key' => 'truck-1',
             'file' => UploadedFile::fake()->create('bc.pdf', 10, 'application/pdf'),
         ]);
 

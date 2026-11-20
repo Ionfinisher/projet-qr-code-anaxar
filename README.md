@@ -1,7 +1,8 @@
-# Gestion des inscriptions transporteurs
+# PortFlow — inscriptions transporteurs et rendez-vous portuaires
 
 Application Laravel 10 / Inertia.js / React 18 pour l'inscription et la validation
-des transporteurs (sociétés et particuliers).
+des transporteurs (sociétés et particuliers), puis la préparation des demandes de
+rendez-vous multi-camions avec documents et QR par camion.
 
 ## Stack
 
@@ -174,3 +175,107 @@ manquante, type de fichier invalide, connexion bloquée/autorisée, vérificatio
 email, approbation/rejet administrateur, resoumission d'un dossier rejeté et
 proxy d'autocomplétion des villes et adresses (validation, cache, dégradation
 gracieuse).
+
+Pour les documents par camion, la suite dédiée est :
+
+```bash
+php artisan test tests/Feature/Transporteur/DemandeDocumentParCamionTest.php
+```
+
+Le build frontend est vérifié avec :
+
+```bash
+npm run build
+```
+
+## Demandes de rendez-vous multi-camions
+
+Une demande peut contenir jusqu'à 20 camions. Chaque camion doit fournir les
+six documents suivants : `bc`, `bf`, `as`, `vt`, `gp`, `ta`.
+
+### Contrat de données
+
+- `trucks[].key` : clé client stable (`^[A-Za-z0-9_-]+\z`, 64 caractères max),
+  utilisée comme clé du formulaire React.
+- `trucks[].rdvId` : identifiant d'un camion déjà enregistré dans **cette**
+  demande, ou `null` pour un nouveau camion. Un identifiant dupliqué ou
+  appartenant à une autre demande est rejeté.
+- `docs` : objet imbriqué `{ [truckKey]: { bc: token|id, ... } }`. **Le format
+  plat `docs.bc` n'est plus accepté** (voir `CHANGELOG.md`).
+- Upload : `POST /transporteur/uploads` avec `type`, `truck_key` et `file`.
+  Le token n'est utilisable que par l'utilisateur, le type et le camion pour
+  lesquels il a été émis.
+
+Les fichiers sont stockés sur le disque privé `local` dans
+`rendez-vous/{demandeId}/{camionId}/`. Les documents historiques sans camion
+restent lisibles en lecture seule et ne sont jamais purgés par une modification.
+
+### QR par camion
+
+Après validation de la demande, chaque camion reçoit son propre token QR. Le
+tableau `dh` ne contient que les empreintes SHA-256 des six documents du
+camion, dans l'ordre fixe `DOCS`. Le champ `lot` est renseigné uniquement pour
+les demandes multi-camions.
+
+> **Limitation connue et héritée :** le générateur signe actuellement en
+> HMAC-SHA256 avec `APP_KEY` tout en annonçant `alg: ES256` dans l'en-tête JWS,
+> alors que le vérificateur historique (`resources/js/Lib/domain.js`) attend une
+> vraie signature ECDSA P-256. Le QR est donc correctement **calculé par
+> camion**, mais sa vérification cryptographique conforme ES256 nécessite une
+> migration de clés (private key serveur + JWK public) hors du périmètre de
+> cette évolution. Le fallback secret en dur a été supprimé : `APP_KEY` est
+> obligatoire.
+
+### Routes ajoutées
+
+| Méthode | URL | Description |
+|---------|-----|-------------|
+| POST | `/transporteur/uploads` | Téléverser un document avec `truck_key` |
+| GET | `/transporteur/demandes/{demande}/documents/{document}/telecharger` | Télécharger un document (transporteur) |
+| GET | `/admin/demandes/{demande}/documents/{document}/telecharger` | Télécharger un document (admin) |
+
+## Structure du projet
+
+- `app/Http/Requests` : validation des formulaires et des uploads.
+- `app/Services` : logique métier (créneaux, demandes, synchronisation camions/documents).
+- `app/Support` : presenters Inertia et génération des QR.
+- `database/migrations` : schéma versionné, dont l'ajout des documents par camion.
+- `resources/js/Pages` : arbre Inertia actif, monté par `resources/js/app.jsx`.
+- `resources/js/features` : ancien arbre SPA conservé pour référence, non monté
+  par `app.jsx`.
+- `tests/Feature` : Tests HTTP Laravel, dont la suite documents par camion.
+
+## Configuration
+
+| Variable | Rôle | Valeur par défaut | Obligatoire |
+|----------|------|-------------------|-------------|
+| `APP_KEY` | Chiffrement Laravel et signature HMAC des QR | vide | oui |
+| `FILESYSTEM_DISK` | Disque des pièces et documents | `local` | oui |
+| `QUEUE_CONNECTION` | File des notifications email | `database` | oui |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Compte admin créé par le seeder | vides | non |
+| `GOOGLE_PLACES_API_KEY` | Autocomplétion villes/adresses | vide | non |
+
+Toutes les variables sont reprises dans `.env.example`. Aucune nouvelle
+variable d'environnement n'a été introduite par les documents par camion.
+
+## Documentation API
+
+Les endpoints publics `/api/places/cities` et `/api/places/addresses` sont
+décrits dans le tableau des routes ci-dessus. Aucune spécification OpenAPI
+n'est générée par le projet ; il s'agit d'une dette documentaire connue.
+
+## Contribuer
+
+Les contributions sont acceptées via pull request. Avant proposition :
+
+```bash
+php artisan test
+npm run build
+```
+
+Le contrôle Pint global échoue actuellement sur du code préexistant non lié à
+cette évolution ; appliquer Pint uniquement aux fichiers réellement modifiés
+(`./vendor/bin/pint <fichier>`) tant que cette dette n'est pas soldée.
+
+Respecter l'arbre Inertia actif (`resources/js/Pages`) et éviter d'étendre
+l'ancien arbre `resources/js/features`, non monté par `app.jsx`.

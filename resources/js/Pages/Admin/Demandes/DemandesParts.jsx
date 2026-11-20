@@ -107,6 +107,26 @@ export function DecisionBar({ children }) {
     );
 }
 
+/** Normalise les documents Inertia (imbriqués par camion ou liste legacy). */
+export function documentsByTruckMap(d) {
+    if (d?.docs && typeof d.docs === 'object' && !Array.isArray(d.docs)) return d.docs;
+
+    if (Array.isArray(d?.documents)) {
+        return d.documents.reduce((map, file) => {
+            const key = file.camion_id ? String(file.camion_id) : 'legacy';
+
+            return { ...map, [key]: { ...(map[key] || {}), [file.type]: file } };
+        }, {});
+    }
+
+    return d?.documents && typeof d.documents === 'object' ? { legacy: d.documents } : {};
+}
+
+/** Documents historiques non rattachés à un camion. */
+export function legacyDocuments(d) {
+    return Array.isArray(d?.documents) ? d.documents.filter((file) => !file.camion_id) : [];
+}
+
 /**
  * Contrôles automatiques d'aide à la décision avant validation.
  */
@@ -167,13 +187,20 @@ export function calculateDemandeChecks(d, now = Date.now()) {
                 trucks.length
             } n° de permis valide${trucks.length > 1 ? 's' : ''}`,
         },
-        {
-            ok: DOCS.every((x) => d.documents?.[x.key] || d.docs?.[x.key]),
-            t: 'Dossier documentaire complet',
-            d: `${
-                DOCS.filter((x) => d.documents?.[x.key] || d.docs?.[x.key]).length
-            }/6 documents déposés`,
-        },
+        (() => {
+            const docsMap = documentsByTruckMap(d);
+            const targets = trucks.length ? trucks : [{ id: 'legacy' }];
+            const required = targets.length * DOCS.length;
+            const provided = targets.reduce((sum, target) => (
+                sum + DOCS.filter((doc) => docsMap[String(target.id)]?.[doc.key]).length
+            ), 0);
+
+            return {
+                ok: provided === required,
+                t: 'Dossier documentaire complet',
+                d: `${provided}/${required} documents déposés`,
+            };
+        })(),
         {
             ok: slotStartMs > now,
             t: 'Créneau à venir',

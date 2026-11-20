@@ -1,4 +1,4 @@
-import { COUNTRIES } from '@/Lib/domain';
+import { COUNTRIES, uid } from '@/Lib/domain';
 
 export const fmtSize = (bytes) => {
     if (!bytes) return '—';
@@ -28,7 +28,11 @@ export const splitPhone = (e164) => {
     return { cc: country?.code || 'TG', national: match[2] };
 };
 
+/** Clé stable d'un emplacement de document (camion + type), utilisée côté formulaire. */
+export const docSlot = (truckKey, type) => `${truckKey}:${type}`;
+
 export const newTruck = () => ({
+    key: uid(),
     driver: { first: '', last: '', phone_cc: 'TG', phone_national: '', license: '' },
     vehicle: { country: 'TG', tractor: '', trailer: '' },
     container: { number: '', iso: '22G1', bl: '', goods: '', vgm: '' },

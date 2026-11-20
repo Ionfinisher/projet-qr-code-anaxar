@@ -20,6 +20,7 @@ class StoreTemporaryUploadRequest extends FormRequest
     {
         return [
             'type' => ['required', Rule::in(DemandeRdv::DOC_TYPES)],
+            'truck_key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+\z/'],
             'file' => ['required', 'file', 'max:10240', 'mimes:pdf,jpg,jpeg,png,webp'],
         ];
     }

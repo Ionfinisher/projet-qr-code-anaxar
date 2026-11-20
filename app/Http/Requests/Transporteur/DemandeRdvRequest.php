@@ -7,6 +7,7 @@ use App\Models\PieceAFournir;
 use App\Support\ContainerNumber;
 use App\Support\PhoneNumber;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -18,7 +19,7 @@ abstract class DemandeRdvRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             'op' => ['required', Rule::in(DemandeRdv::OPERATIONS)],
             'terminal' => ['required', Rule::in(DemandeRdv::TERMINALS)],
             'date' => ['required', 'date_format:Y-m-d'],
@@ -34,6 +35,7 @@ abstract class DemandeRdvRequest extends FormRequest
             'mandated.phone' => ['nullable', 'string', 'max:20'],
 
             'trucks' => ['required', 'array', 'min:1', 'max:20'],
+            'trucks.*.key' => ['required', 'string', 'max:64', 'regex:/^[A-Za-z0-9_-]+\z/'],
             'trucks.*.rdvId' => ['nullable', 'integer'],
             'trucks.*.driver.first' => ['required', 'string', 'max:80'],
             'trucks.*.driver.last' => ['required', 'string', 'max:80'],
@@ -58,14 +60,15 @@ abstract class DemandeRdvRequest extends FormRequest
             'trucks.*.container.goods' => ['nullable', 'string', 'max:255'],
             'trucks.*.container.vgm' => ['nullable', 'integer', 'between:1000,45000'],
 
-            'docs' => ['required', 'array'],
-            'docs.bc' => ['required'],
-            'docs.bf' => ['required'],
-            'docs.as' => ['required'],
-            'docs.vt' => ['required'],
-            'docs.gp' => ['required'],
-            'docs.ta' => ['required'],
+            'docs' => ['required', 'array', 'min:1'],
+            'docs.*' => ['required', 'array', 'size:'.count(DemandeRdv::DOC_TYPES)],
         ];
+
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $rules["docs.*.{$type}"] = ['required'];
+        }
+
+        return $rules;
     }
 
     public function withValidator(Validator $validator): void
@@ -74,6 +77,12 @@ abstract class DemandeRdvRequest extends FormRequest
             $data = $validator->getData();
             $operation = $data['op'] ?? null;
             $trucks = is_array($data['trucks'] ?? null) ? $data['trucks'] : [];
+
+            $demande = $this->route('demande');
+            $validRdvIds = $demande instanceof DemandeRdv
+                ? $demande->camions()->pluck('id')->map(fn ($id) => (int) $id)->all()
+                : [];
+            $seenRdvIds = [];
 
             $containers = [];
             $tractors = [];
@@ -85,6 +94,24 @@ abstract class DemandeRdvRequest extends FormRequest
             foreach ($trucks as $index => $truck) {
                 if (! is_array($truck)) {
                     continue;
+                }
+
+                $rawRdvId = $truck['rdvId'] ?? null;
+                $rdvId = is_numeric($rawRdvId) ? (int) $rawRdvId : null;
+
+                if ($rdvId !== null) {
+                    if (isset($seenRdvIds[$rdvId])) {
+                        $validator->errors()->add("trucks.{$index}.rdvId", 'Ce camion est référencé plusieurs fois.');
+                    }
+
+                    $seenRdvIds[$rdvId] = true;
+
+                    if (! in_array($rdvId, $validRdvIds, true)) {
+                        $validator->errors()->add(
+                            "trucks.{$index}.rdvId",
+                            'Ce camion ne fait pas partie de cette demande.'
+                        );
+                    }
                 }
 
                 $driver = is_array($truck['driver'] ?? null) ? $truck['driver'] : [];
@@ -217,16 +244,62 @@ abstract class DemandeRdvRequest extends FormRequest
             }
 
             $docs = is_array($data['docs'] ?? null) ? $data['docs'] : [];
-            foreach (DemandeRdv::DOC_TYPES as $type) {
-                $value = $docs[$type] ?? null;
+            $truckKeys = [];
 
-                if (is_int($value)) {
+            foreach ($trucks as $index => $truck) {
+                $key = is_array($truck) ? ($truck['key'] ?? null) : null;
+
+                if (! is_string($key) || $key === '') {
                     continue;
                 }
 
-                if (! is_string($value) || (! ctype_digit($value) && ! Str::isUuid($value))) {
-                    $validator->errors()->add("docs.{$type}", 'Référence de document invalide.');
+                if (isset($truckKeys[$key])) {
+                    $validator->errors()->add("trucks.{$index}.key", 'Clé de camion dupliquée.');
                 }
+
+                $truckKeys[$key] = true;
+            }
+
+            foreach ($docs as $truckKey => $truckDocs) {
+                if (! isset($truckKeys[$truckKey])) {
+                    $validator->errors()->add("docs.{$truckKey}", 'Ce camion ne fait pas partie de la demande.');
+
+                    continue;
+                }
+
+                if (! is_array($truckDocs)) {
+                    $validator->errors()->add("docs.{$truckKey}", 'Documents invalides pour ce camion.');
+
+                    continue;
+                }
+
+                foreach (DemandeRdv::DOC_TYPES as $type) {
+                    $value = $truckDocs[$type] ?? null;
+
+                    if (is_int($value)) {
+                        continue;
+                    }
+
+                    if (! is_string($value) || (! ctype_digit($value) && ! Str::isUuid($value))) {
+                        $validator->errors()->add("docs.{$truckKey}.{$type}", 'Référence de document invalide.');
+                    }
+                }
+            }
+
+            foreach (array_keys($truckKeys) as $key) {
+                foreach (DemandeRdv::DOC_TYPES as $type) {
+                    if (! isset($docs[$key]) || ! is_array($docs[$key]) || ! isset($docs[$key][$type])) {
+                        $validator->errors()->add("docs.{$key}.{$type}", 'Ce document est obligatoire.');
+                    }
+                }
+            }
+
+            if ($validator->errors()->isNotEmpty()) {
+                Log::warning('DemandeRdv: validation échouée', [
+                    'errors' => $validator->errors()->toArray(),
+                    'trucks' => array_keys($trucks),
+                    'docs_keys' => array_keys($docs),
+                ]);
             }
         });
     }

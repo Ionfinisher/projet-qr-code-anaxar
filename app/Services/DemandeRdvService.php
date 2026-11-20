@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Creneau;
+use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\PieceAFournir;
 use App\Models\TemporaryUpload;
@@ -25,7 +26,9 @@ class DemandeRdvService
 
     public function create(User $user, array $data): DemandeRdv
     {
-        $demande = DB::transaction(function () use ($user, $data) {
+        $pathsToDelete = [];
+
+        $demande = DB::transaction(function () use ($user, $data, &$pathsToDelete) {
             $creneau = $this->resolveSlot($data['date'], $data['start']);
             $trucks = $data['trucks'];
             $this->assertBookable($creneau, count($trucks), null);
@@ -41,9 +44,11 @@ class DemandeRdvService
                 'submitted_at' => now(),
             ], $this->mandatedColumns($user, $data)));
 
-            $this->replaceCamions($demande, $trucks, $data['op']);
-            $this->syncDocuments($demande, $data['docs'], $user);
+            $camionIdsByKey = $this->syncCamions($demande, $trucks, $data['op'], $pathsToDelete);
+            $this->syncDocuments($demande, $data['docs'], $user, $camionIdsByKey, $pathsToDelete);
             $this->record($demande, 'soumise', $user, 'Demande envoyée.');
+
+            DB::afterCommit(fn () => $this->deleteFiles($pathsToDelete));
 
             return $demande;
         }, 3);
@@ -56,7 +61,9 @@ class DemandeRdvService
 
     public function update(DemandeRdv $demande, array $data, User $user): DemandeRdv
     {
-        return DB::transaction(function () use ($demande, $data, $user) {
+        $pathsToDelete = [];
+
+        return DB::transaction(function () use ($demande, $data, $user, &$pathsToDelete) {
             $locked = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
             $creneau = $this->resolveSlot($data['date'], $data['start']);
             $trucks = $data['trucks'];
@@ -70,9 +77,11 @@ class DemandeRdvService
                 'trucks_count' => count($trucks),
             ], $this->mandatedColumns($user, $data)));
 
-            $this->replaceCamions($locked, $trucks, $data['op']);
-            $this->syncDocuments($locked, $data['docs'], $user);
+            $camionIdsByKey = $this->syncCamions($locked, $trucks, $data['op'], $pathsToDelete);
+            $this->syncDocuments($locked, $data['docs'], $user, $camionIdsByKey, $pathsToDelete);
             $this->record($locked, 'modifiee', $user, 'Demande modifiée.');
+
+            DB::afterCommit(fn () => $this->deleteFiles($pathsToDelete));
 
             return $locked;
         }, 3);
@@ -222,95 +231,187 @@ class DemandeRdvService
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $trucks
+     * @param  array<int, string>  $pathsToDelete
      */
-    private function replaceCamions(DemandeRdv $demande, array $trucks, string $operation): void
+    private function deleteFiles(array $pathsToDelete): void
     {
-        $demande->camions()->delete();
+        if ($pathsToDelete === []) {
+            return;
+        }
+
+        Storage::disk('local')->delete($pathsToDelete);
+    }
+
+    /**
+     * Synchronise les camions sans recréer ceux qui sont conservés : les documents
+     * restent ainsi rattachés au même enregistrement lors d'une modification.
+     *
+     * @param  array<int, array<string, mixed>>  $trucks
+     * @param  array<int, string>  $pathsToDelete
+     * @return array<string, int> clé côté client => identifiant du camion
+     */
+    private function syncCamions(DemandeRdv $demande, array $trucks, string $operation, array &$pathsToDelete): array
+    {
+        $existing = $demande->camions()->get()->keyBy('id');
+
+        // La position est unique : on libère d'abord les positions existantes pour
+        // autoriser un réordonnancement sans violation temporaire de contrainte.
+        $temporaryPosition = 1000;
+        foreach ($existing as $camion) {
+            $camion->update(['position' => $temporaryPosition++]);
+        }
+
+        $kept = [];
+        $camionIdsByKey = [];
 
         foreach ($trucks as $index => $truck) {
-            $container = ContainerNumber::normalize($truck['container']['number'] ?? '');
+            $key = (string) $truck['key'];
+            $rdvId = isset($truck['rdvId']) ? (int) $truck['rdvId'] : null;
+            $camion = $rdvId !== null ? $existing->get($rdvId) : null;
 
-            $demande->camions()->create([
-                'position' => $index + 1,
-                'driver_first' => trim((string) $truck['driver']['first']),
-                'driver_last' => Str::upper(trim((string) $truck['driver']['last'])),
-                'driver_phone' => trim((string) $truck['driver']['phone']),
-                'driver_license' => $this->normalizeCode($truck['driver']['license'] ?? ''),
-                'vehicle_country' => Str::upper((string) $truck['vehicle']['country']),
-                'vehicle_tractor' => $this->normalizePlate($truck['vehicle']['tractor'] ?? ''),
-                'vehicle_trailer' => $this->normalizePlate($truck['vehicle']['trailer'] ?? '') ?: null,
-                'container_number' => $container !== '' ? $container : null,
-                'container_iso' => Str::upper((string) $truck['container']['iso']),
-                'container_bl' => $this->normalizeCode($truck['container']['bl'] ?? '') ?: null,
-                'container_goods' => $this->nullableString($truck['container']['goods'] ?? null),
-                'container_vgm' => $operation === 'EXP'
-                    ? $this->nullableInt($truck['container']['vgm'] ?? null)
-                    : null,
-            ]);
+            if ($camion === null) {
+                $camion = $demande->camions()->create($this->camionAttributes($truck, $index + 1, $operation));
+            } else {
+                $camion->update($this->camionAttributes($truck, $index + 1, $operation));
+            }
+
+            if (isset($camionIdsByKey[$key])) {
+                throw ValidationException::withMessages([
+                    'trucks' => 'Chaque camion doit avoir une clé unique.',
+                ]);
+            }
+
+            $camionIdsByKey[$key] = $camion->id;
+            $kept[] = $camion->id;
+        }
+
+        $removedIds = array_values(array_diff($existing->keys()->all(), $kept));
+
+        if ($removedIds !== []) {
+            $this->deleteCamionDocuments($demande, $removedIds, $pathsToDelete);
+            $demande->camions()->whereIn('id', $removedIds)->delete();
+        }
+
+        return $camionIdsByKey;
+    }
+
+    /**
+     * @param  array<int, int>  $camionIds
+     * @param  array<int, string>  $pathsToDelete
+     */
+    private function deleteCamionDocuments(DemandeRdv $demande, array $camionIds, array &$pathsToDelete): void
+    {
+        $documents = $demande->documents()->whereIn('demande_camion_id', $camionIds)->get();
+
+        foreach ($documents as $document) {
+            $pathsToDelete[] = $document->path;
+            $document->delete();
         }
     }
 
     /**
-     * Rattache les documents validés à la demande et déplace les fichiers temporaires.
-     *
-     * @param  array<string, string|int>  $docs
+     * @param  array<string, mixed>  $truck
+     * @return array<string, mixed>
      */
-    private function syncDocuments(DemandeRdv $demande, array $docs, User $user): void
+    private function camionAttributes(array $truck, int $position, string $operation): array
     {
-        $existing = $demande->documents()->get()->keyBy('type');
+        $container = ContainerNumber::normalize($truck['container']['number'] ?? '');
+
+        return [
+            'position' => $position,
+            'driver_first' => trim((string) $truck['driver']['first']),
+            'driver_last' => Str::upper(trim((string) $truck['driver']['last'])),
+            'driver_phone' => trim((string) $truck['driver']['phone']),
+            'driver_license' => $this->normalizeCode($truck['driver']['license'] ?? ''),
+            'vehicle_country' => Str::upper((string) $truck['vehicle']['country']),
+            'vehicle_tractor' => $this->normalizePlate($truck['vehicle']['tractor'] ?? ''),
+            'vehicle_trailer' => $this->normalizePlate($truck['vehicle']['trailer'] ?? '') ?: null,
+            'container_number' => $container !== '' ? $container : null,
+            'container_iso' => Str::upper((string) $truck['container']['iso']),
+            'container_bl' => $this->normalizeCode($truck['container']['bl'] ?? '') ?: null,
+            'container_goods' => $this->nullableString($truck['container']['goods'] ?? null),
+            'container_vgm' => $operation === 'EXP'
+                ? $this->nullableInt($truck['container']['vgm'] ?? null)
+                : null,
+        ];
+    }
+
+    /**
+     * Rattache les documents validés à chaque camion et déplace les fichiers temporaires.
+     *
+     * @param  array<string, array<string, string|int>>  $docs
+     * @param  array<string, int>  $camionIdsByKey
+     * @param  array<int, string>  $pathsToDelete
+     */
+    private function syncDocuments(DemandeRdv $demande, array $docs, User $user, array $camionIdsByKey, array &$pathsToDelete): void
+    {
+        $existing = $demande->documents()->get()->keyBy(
+            fn (DemandeDocument $document) => $document->demande_camion_id.'|'.$document->type
+        );
         $resolved = [];
 
-        foreach (DemandeRdv::DOC_TYPES as $type) {
-            $value = $docs[$type] ?? null;
-            $raw = is_int($value) ? (string) $value : (is_string($value) ? trim($value) : '');
+        foreach ($camionIdsByKey as $truckKey => $camionId) {
+            foreach (DemandeRdv::DOC_TYPES as $type) {
+                $value = $docs[$truckKey][$type] ?? null;
+                $raw = is_int($value) ? (string) $value : (is_string($value) ? trim($value) : '');
+                $errorKey = "docs.{$truckKey}.{$type}";
 
-            if ($raw === '') {
-                throw ValidationException::withMessages([
-                    "docs.{$type}" => 'Ce document est obligatoire.',
-                ]);
-            }
-
-            if (Str::isUuid($raw)) {
-                $upload = TemporaryUpload::query()
-                    ->where('token', $raw)
-                    ->where('user_id', $user->id)
-                    ->where('type', $type)
-                    ->first();
-
-                if (! $upload) {
-                    throw ValidationException::withMessages([
-                        "docs.{$type}" => 'Le fichier téléversé est introuvable ou expiré.',
-                    ]);
+                if ($raw === '') {
+                    throw ValidationException::withMessages([$errorKey => 'Ce document est obligatoire.']);
                 }
 
-                $resolved[$type] = ['kind' => 'temp', 'upload' => $upload];
+                if (Str::isUuid($raw)) {
+                    // La clé du camion fait partie de la recherche : un token ne peut
+                    // pas être réutilisé pour un autre camion ni un autre utilisateur.
+                    $upload = TemporaryUpload::query()
+                        ->where('token', $raw)
+                        ->where('user_id', $user->id)
+                        ->where('type', $type)
+                        ->where('truck_key', $truckKey)
+                        ->first();
 
-                continue;
-            }
+                    if (! $upload) {
+                        throw ValidationException::withMessages([
+                            $errorKey => 'Le fichier téléversé est introuvable ou expiré.',
+                        ]);
+                    }
 
-            if (ctype_digit($raw)) {
-                $document = $existing->get($type);
+                    $resolved[] = [
+                        'kind' => 'temp',
+                        'upload' => $upload,
+                        'camion_id' => $camionId,
+                        'type' => $type,
+                    ];
 
-                if (! $document || (int) $raw !== $document->id) {
-                    throw ValidationException::withMessages([
-                        "docs.{$type}" => 'Ce document ne correspond pas à la demande.',
-                    ]);
+                    continue;
                 }
 
-                $resolved[$type] = ['kind' => 'existing', 'document' => $document];
+                if (ctype_digit($raw)) {
+                    $document = $existing->get($camionId.'|'.$type);
 
-                continue;
+                    if (! $document || (int) $raw !== $document->id) {
+                        throw ValidationException::withMessages([
+                            $errorKey => 'Ce document ne correspond pas à ce camion.',
+                        ]);
+                    }
+
+                    $resolved[] = [
+                        'kind' => 'existing',
+                        'document' => $document,
+                        'camion_id' => $camionId,
+                        'type' => $type,
+                    ];
+
+                    continue;
+                }
+
+                throw ValidationException::withMessages([$errorKey => 'Référence de document invalide.']);
             }
-
-            throw ValidationException::withMessages([
-                "docs.{$type}" => 'Référence de document invalide.',
-            ]);
         }
 
         $keep = [];
 
-        foreach ($resolved as $type => $item) {
+        foreach ($resolved as $item) {
             if ($item['kind'] === 'existing') {
                 $keep[] = $item['document']->id;
 
@@ -319,9 +420,10 @@ class DemandeRdvService
 
             /** @var TemporaryUpload $upload */
             $upload = $item['upload'];
-            $old = $existing->get($type);
+            $type = $item['type'];
+            $old = $existing->get($item['camion_id'].'|'.$type);
             $extension = strtolower(pathinfo($upload->original_name, PATHINFO_EXTENSION));
-            $directory = "rendez-vous/{$demande->id}";
+            $directory = "rendez-vous/{$demande->id}/{$item['camion_id']}";
             $path = $directory.'/'.$type.'-'.Str::uuid().($extension !== '' ? '.'.$extension : '');
 
             Storage::disk('local')->makeDirectory($directory);
@@ -331,11 +433,12 @@ class DemandeRdvService
             }
 
             if ($old) {
-                Storage::disk('local')->delete($old->path);
+                $pathsToDelete[] = $old->path;
                 $old->delete();
             }
 
             $document = $demande->documents()->create([
+                'demande_camion_id' => $item['camion_id'],
                 'type' => $type,
                 'original_name' => $upload->original_name,
                 'path' => $path,
@@ -348,10 +451,16 @@ class DemandeRdvService
             $upload->delete();
         }
 
-        $demande->documents()->whereNotIn('id', $keep)->get()->each(function ($document) {
-            Storage::disk('local')->delete($document->path);
-            $document->delete();
-        });
+        // Les documents legacy (sans camion) ne sont pas gérés par ce formulaire :
+        // ils doivent rester visibles et ne jamais être purgés ici.
+        $demande->documents()
+            ->whereNotNull('demande_camion_id')
+            ->whereNotIn('id', $keep)
+            ->get()
+            ->each(function (DemandeDocument $document) use (&$pathsToDelete) {
+                $pathsToDelete[] = $document->path;
+                $document->delete();
+            });
     }
 
     /**

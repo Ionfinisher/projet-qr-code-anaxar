@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class DemandeCamion extends Model
 {
@@ -35,5 +36,10 @@ class DemandeCamion extends Model
     public function demande(): BelongsTo
     {
         return $this->belongsTo(DemandeRdv::class, 'demande_rdv_id');
+    }
+
+    public function documents(): HasMany
+    {
+        return $this->hasMany(DemandeDocument::class, 'demande_camion_id');
     }
 }

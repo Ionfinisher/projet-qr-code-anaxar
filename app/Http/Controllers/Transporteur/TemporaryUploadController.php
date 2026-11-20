@@ -34,6 +34,7 @@ class TemporaryUploadController extends Controller
         $upload = TemporaryUpload::create([
             'token' => (string) Str::uuid(),
             'user_id' => $user->id,
+            'truck_key' => $request->string('truck_key')->toString(),
             'type' => $request->string('type')->toString(),
             'original_name' => Str::limit($file->getClientOriginalName(), 255, ''),
             'path' => $path,

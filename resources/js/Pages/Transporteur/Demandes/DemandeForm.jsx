@@ -20,20 +20,24 @@ import { cn } from '@/Lib/cn';
 import { StepTrucks } from '@/features/transporteur/components/wizard/StepTrucks';
 import InertiaStepSlot from './InertiaStepSlot';
 import DemandeReview from './DemandeReview';
+import TruckDocuments from './TruckDocuments';
 import {
     COUNTRIES,
     DOCS,
     ISO_TYPES,
+    OPS,
     fmtInt,
     formatPhone,
     normalizePlate,
     parseBL,
     parseContainer,
     toE164,
+    uid,
 } from '@/Lib/domain';
-import { fmtSize, newTruck, parseSlotKey, slotKey, splitPhone } from './helpers';
+import { docSlot, newTruck, parseSlotKey, slotKey, splitPhone } from './helpers';
 
 const MAX_TRUCKS = 20;
+const emptyDocs = () => Object.fromEntries(DOCS.map((doc) => [doc.key, '']));
 
 // Champs de camion exposés à StepTrucks (clé courte → suffixe du chemin d'erreur serveur).
 const TRUCK_ERROR_FIELDS = {
@@ -63,7 +67,7 @@ const TRUCK_UNIQUE_RULES = [
 
 // Conversion camion « formulaire » (imbriqué) ↔ camion « modèle » (plat, attendu par StepTrucks).
 const toTemplateTruck = (truck, index) => ({
-    k: truck.rdvId || `inertia-${index}`,
+    k: truck.key || truck.rdvId || `inertia-${index}`,
     rdvId: truck.rdvId || null,
     first: truck.driver.first,
     last: truck.driver.last,
@@ -81,6 +85,7 @@ const toTemplateTruck = (truck, index) => ({
 });
 
 const formTruck = (truck) => ({
+    key: truck.k || truck.key || uid(),
     rdvId: truck.rdvId || null,
     driver: {
         first: truck.first || '',
@@ -105,6 +110,34 @@ const formTruck = (truck) => ({
 
 function fromDemande(demande) {
     const mandated = splitPhone(demande.mandated?.phone);
+    const trucks = (demande.trucks || []).map((truck, index) => {
+        const phone = splitPhone(truck.driver?.phone);
+        const key = String(truck.id ?? index);
+
+        return {
+            key,
+            rdvId: truck.id,
+            driver: {
+                first: truck.driver?.first || '',
+                last: truck.driver?.last || '',
+                phone_cc: phone.cc,
+                phone_national: phone.national,
+                license: truck.driver?.license || '',
+            },
+            vehicle: {
+                country: truck.vehicle?.country || 'TG',
+                tractor: truck.vehicle?.tractor || '',
+                trailer: truck.vehicle?.trailer || '',
+            },
+            container: {
+                number: truck.container?.number || '',
+                iso: truck.container?.iso || '22G1',
+                bl: truck.container?.bl || '',
+                goods: truck.container?.goods || '',
+                vgm: truck.container?.vgm ?? '',
+            },
+        };
+    });
 
     return {
         op: demande.op || 'IMP',
@@ -120,37 +153,17 @@ function fromDemande(demande) {
             phone_cc: mandated.cc,
             phone_national: mandated.national,
         },
-        trucks: (demande.trucks || []).map((truck) => {
-            const phone = splitPhone(truck.driver?.phone);
-
-            return {
-                rdvId: truck.id,
-                driver: {
-                    first: truck.driver?.first || '',
-                    last: truck.driver?.last || '',
-                    phone_cc: phone.cc,
-                    phone_national: phone.national,
-                    license: truck.driver?.license || '',
-                },
-                vehicle: {
-                    country: truck.vehicle?.country || 'TG',
-                    tractor: truck.vehicle?.tractor || '',
-                    trailer: truck.vehicle?.trailer || '',
-                },
-                container: {
-                    number: truck.container?.number || '',
-                    iso: truck.container?.iso || '22G1',
-                    bl: truck.container?.bl || '',
-                    goods: truck.container?.goods || '',
-                    vgm: truck.container?.vgm ?? '',
-                },
-            };
-        }),
-        docs: Object.fromEntries(DOCS.map((doc) => [doc.key, demande.docs?.[doc.key]?.id ?? ''])),
+        trucks,
+        docs: Object.fromEntries(trucks.map((truck) => [
+            truck.key,
+            Object.fromEntries(DOCS.map((doc) => [doc.key, demande.docs?.[truck.key]?.[doc.key]?.id ?? ''])),
+        ])),
     };
 }
 
 function fromInitialSlot(initialSlot, truckMode) {
+    const trucks = Array.from({ length: truckMode === 'lot' ? 2 : 1 }, () => newTruck());
+
     return {
         op: 'IMP',
         terminal: 'LCT',
@@ -158,8 +171,8 @@ function fromInitialSlot(initialSlot, truckMode) {
         notes: '',
         transitaire: '',
         mandated: { type: 'entreprise', company: '', first: '', last: '', phone_cc: 'TG', phone_national: '' },
-        trucks: Array.from({ length: truckMode === 'lot' ? 2 : 1 }, () => newTruck()),
-        docs: Object.fromEntries(DOCS.map((doc) => [doc.key, ''])),
+        trucks,
+        docs: Object.fromEntries(trucks.map((truck) => [truck.key, emptyDocs()])),
     };
 }
 
@@ -168,6 +181,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
     const form = useForm(demande ? fromDemande(demande) : fromInitialSlot(initialSlot, truckMode));
     const [step, setStep] = useState(0);
     const [attempted, setAttempted] = useState(false);
+    const [activeTruckKey, setActiveTruckKey] = useState(null);
     const steps = [
         ['Opération et créneau', 'Choisissez le rendez-vous'],
         ['Camions', `${form.data.trucks.length} camion${form.data.trucks.length > 1 ? 's' : ''}`],
@@ -175,23 +189,28 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         ['Vérification', 'Relisez et envoyez'],
     ];
 
-    const originalDocs = useMemo(
-        () => (mode === 'edit' && demande
-            ? Object.fromEntries(DOCS.map((doc) => [doc.key, demande.docs?.[doc.key]?.id ?? '']))
-            : {}),
-        [mode, demande],
-    );
+    const originalDocs = useMemo(() => {
+        if (mode !== 'edit' || !demande) return {};
+
+        return Object.fromEntries((demande.trucks || []).map((truck, index) => {
+            const key = String(truck.id ?? index);
+
+            return [key, Object.fromEntries(DOCS.map((doc) => [doc.key, demande.docs?.[key]?.[doc.key]?.id ?? '']))];
+        }));
+    }, [mode, demande]);
 
     const originalMeta = useMemo(() => {
         if (mode !== 'edit' || !demande) return {};
 
-        return Object.fromEntries(DOCS
-            .map((doc) => {
-                const file = demande.docs?.[doc.key];
+        return Object.fromEntries((demande.trucks || []).flatMap((truck, index) => {
+            const key = String(truck.id ?? index);
 
-                return file ? [doc.key, { name: file.name, size: file.size, url: file.url, existing: true }] : null;
-            })
-            .filter(Boolean));
+            return DOCS.flatMap((doc) => {
+                const file = demande.docs?.[key]?.[doc.key];
+
+                return file ? [[docSlot(key, doc.key), { name: file.name, size: file.size, url: file.url, existing: true }]] : [];
+            });
+        }));
     }, [mode, demande]);
 
     const [uploaded, setUploaded] = useState(() => ({ ...originalMeta }));
@@ -216,12 +235,19 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
     );
 
     const templateTrucks = useMemo(() => form.data.trucks.map(toTemplateTruck), [form.data.trucks]);
+    const selectedTruck = form.data.trucks.find((truck) => String(truck.key) === activeTruckKey) || form.data.trucks[0];
+    const selectedTruckKey = selectedTruck ? String(selectedTruck.key) : '';
+    const selectedTruckIndex = selectedTruck ? form.data.trucks.indexOf(selectedTruck) : -1;
+
+    const docsComplete = (truckKey) => DOCS.filter((doc) => form.data.docs?.[String(truckKey)]?.[doc.key]).length;
+    const totalDocs = form.data.trucks.reduce((sum, truck) => sum + docsComplete(truck.key), 0);
+    const expectedDocs = form.data.trucks.length * DOCS.length;
 
     const setTemplateTruck = (key, patch) => {
         form.setData((data) => ({
             ...data,
             trucks: data.trucks.map((truck, index) => {
-                const currentKey = truck.rdvId || `inertia-${index}`;
+                const currentKey = truck.key || truck.rdvId || `inertia-${index}`;
                 if (currentKey !== key) return truck;
 
                 const next = { ...truck };
@@ -246,6 +272,15 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         }));
     };
 
+    // Garantit que chaque camion possède son propre jeu de 6 documents, et supprime
+    // les jeux devenus orphelins lors d'une suppression.
+    const syncDocsForTrucks = (data) => {
+        const keys = new Set(data.trucks.map((truck) => String(truck.key)));
+        const docs = Object.fromEntries([...keys].map((key) => [key, data.docs?.[key] || emptyDocs()]));
+
+        return { ...data, docs };
+    };
+
     // `set` accepte un patch { trucks } ou un updater (comme l'ancien assistant) : StepTrucks ajoute,
     // duplique, retire et importe des camions via une fonction (mise à jour sûre malgré des clics rapprochés).
     const setTemplateForm = (patchOrUpdater) => {
@@ -257,7 +292,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
 
             if (!patch?.trucks) return data;
 
-            return { ...data, trucks: patch.trucks.map(formTruck) };
+            return syncDocsForTrucks({ ...data, trucks: patch.trucks.map(formTruck) });
         });
     };
 
@@ -274,51 +309,65 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
 
     const addTruck = () => {
         if (form.data.trucks.length >= MAX_TRUCKS) return;
-        form.setData((data) => ({ ...data, trucks: [...data.trucks, newTruck()] }));
+        form.setData((data) => syncDocsForTrucks({ ...data, trucks: [...data.trucks, newTruck()] }));
     };
 
     const removeTruck = (index) => {
         if (form.data.trucks.length === 1) return;
-        form.setData((data) => ({ ...data, trucks: data.trucks.filter((_, i) => i !== index) }));
+        form.setData((data) => syncDocsForTrucks({
+            ...data,
+            trucks: data.trucks.filter((_, i) => i !== index),
+        }));
     };
 
     const setMandated = (patch) => {
         form.setData((data) => ({ ...data, mandated: { ...data.mandated, ...patch } }));
     };
 
-    const upload = async (key, file) => {
+    const upload = async (truckKey, type, file) => {
         if (!file) return;
 
-        setUploading((prev) => ({ ...prev, [key]: true }));
-        setUploadErrors((prev) => ({ ...prev, [key]: null }));
+        const slot = docSlot(truckKey, type);
+
+        setUploading((prev) => ({ ...prev, [slot]: true }));
+        setUploadErrors((prev) => ({ ...prev, [slot]: null }));
 
         const body = new FormData();
-        body.append('type', key);
+        body.append('type', type);
+        body.append('truck_key', truckKey);
         body.append('file', file);
 
         try {
             const { data } = await axios.post(route('transporteur.uploads.store'), body);
-            form.setData((current) => ({ ...current, docs: { ...current.docs, [key]: data.token } }));
-            form.clearErrors(`docs.${key}`);
-            setUploadErrors((prev) => ({ ...prev, [key]: null }));
+            form.setData((current) => ({
+                ...current,
+                docs: {
+                    ...current.docs,
+                    [truckKey]: { ...(current.docs?.[truckKey] || emptyDocs()), [type]: data.token },
+                },
+            }));
+            form.clearErrors(`docs.${truckKey}.${type}`);
+            setUploadErrors((prev) => ({ ...prev, [slot]: null }));
             setUploaded((prev) => ({
                 ...prev,
-                [key]: { name: data.name, size: data.size, token: data.token, existing: false },
+                [slot]: { name: data.name, size: data.size, token: data.token, existing: false },
             }));
         } catch (error) {
             const message = error?.response?.data?.errors?.file?.[0]
+                || error?.response?.data?.errors?.truck_key?.[0]
                 || error?.response?.data?.message
                 || 'Téléversement impossible. Réessayez.';
 
-            setUploadErrors((prev) => ({ ...prev, [key]: message }));
+            setUploadErrors((prev) => ({ ...prev, [slot]: message }));
         } finally {
-            setUploading((prev) => ({ ...prev, [key]: false }));
-            if (fileInputs.current[key]) fileInputs.current[key].value = '';
+            setUploading((prev) => ({ ...prev, [slot]: false }));
+            if (fileInputs.current[slot]) fileInputs.current[slot].value = '';
         }
     };
 
-    const removeUpload = async (key) => {
-        const token = form.data.docs[key];
+    const removeUpload = async (truckKey, type) => {
+        const slot = docSlot(truckKey, type);
+        const token = form.data.docs?.[truckKey]?.[type];
 
         if (typeof token === 'string' && token.length > 20) {
             try {
@@ -328,13 +377,19 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
             }
         }
 
-        const original = originalDocs[key];
-        form.setData((current) => ({ ...current, docs: { ...current.docs, [key]: original || '' } }));
+        const original = originalDocs[truckKey]?.[type];
+        form.setData((current) => ({
+            ...current,
+            docs: {
+                ...current.docs,
+                [truckKey]: { ...(current.docs?.[truckKey] || emptyDocs()), [type]: original || '' },
+            },
+        }));
         setUploaded((prev) => {
             const next = { ...prev };
 
-            if (original && originalMeta[key]) next[key] = originalMeta[key];
-            else delete next[key];
+            if (original && originalMeta[slot]) next[slot] = originalMeta[slot];
+            else delete next[slot];
 
             return next;
         });
@@ -358,6 +413,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                 phone: toE164(data.mandated.phone_cc, data.mandated.phone_national),
             } : null,
             trucks: data.trucks.map((truck) => ({
+                key: String(truck.key || truck.rdvId || ''),
                 rdvId: truck.rdvId ?? null,
                 driver: {
                     first: truck.driver.first.trim(),
@@ -463,10 +519,19 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
             }
         }
         if (step === 2) {
-            const missing = DOCS.find((doc) => !form.data.docs[doc.key]);
+            const incompleteIndex = form.data.trucks.findIndex((truck) => (
+                DOCS.some((doc) => !form.data.docs?.[String(truck.key)]?.[doc.key])
+            ));
 
-            if (missing) {
-                form.setError(`docs.${missing.key}`, `Le document « ${missing.label} » est obligatoire.`);
+            if (incompleteIndex >= 0) {
+                const truck = form.data.trucks[incompleteIndex];
+                const key = String(truck.key);
+                const missing = DOCS.find((doc) => !form.data.docs?.[key]?.[doc.key]);
+
+                form.setError(
+                    `docs.${key}.${missing.key}`,
+                    `Le document « ${missing.label} » est obligatoire pour le camion ${incompleteIndex + 1}.`,
+                );
                 return;
             }
         }
@@ -528,11 +593,18 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                 </div>
             </aside>
             <div className="flex min-w-0 flex-col gap-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.05)] sm:p-8">
-                <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-700">
-                        {mode === 'edit' ? `Modifier la demande ${demande.reference}` : 'Nouvelle demande de rendez-vous'} · étape {step + 1}
-                    </p>
-                    <h1 tabIndex={-1} className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 focus:outline-none">{steps[step][0]}</h1>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-700">
+                            {mode === 'edit' ? `Modifier la demande ${demande.reference}` : 'Nouvelle demande de rendez-vous'} · étape {step + 1}
+                        </p>
+                        <h1 tabIndex={-1} className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900 focus:outline-none">{steps[step][0]}</h1>
+                    </div>
+                    {step > 0 && form.data.op ? (
+                        <Badge tone="brand">
+                            {OPS[form.data.op]?.label || OPS[form.data.op]?.short || form.data.op}
+                        </Badge>
+                    ) : null}
                 </div>
             {form.hasErrors ? (
                 <Alert tone="bad" title="Corrigez les erreurs du formulaire">
@@ -897,98 +969,62 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
             <Card>
                 <SectionTitle
                     icon="file-up"
-                    aside={<Badge tone="neutral">{DOCS.filter((doc) => form.data.docs[doc.key]).length}/{DOCS.length}</Badge>}
+                    aside={<Badge tone={totalDocs === expectedDocs ? 'ok' : 'neutral'}>{totalDocs}/{expectedDocs}</Badge>}
                 >
-                    Documents obligatoires
+                    Documents obligatoires par camion
                 </SectionTitle>
                 <p className="-mt-2 mb-4 text-sm text-slate-500">
-                    Formats acceptés : PDF, JPG, PNG ou WebP · 10 Mo maximum par fichier.
+                    Sélectionnez un camion pour déposer ses 6 pièces. Formats acceptés : PDF, JPG, PNG ou WebP · 10 Mo maximum par fichier.
                 </p>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                    {DOCS.map((doc) => {
-                        const meta = uploaded[doc.key];
-                        const busy = uploading[doc.key];
-                        const error = form.errors[`docs.${doc.key}`] || uploadErrors[doc.key] || form.errors.docs;
+                <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Camions">
+                    {form.data.trucks.map((truck, index) => {
+                        const key = String(truck.key);
+                        const active = key === selectedTruckKey;
+                        const complete = docsComplete(key);
 
                         return (
-                            <div key={doc.key} className="rounded-xl border border-slate-200 p-4">
-                                <div className="flex items-start gap-3">
-                                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
-                                        <Icon name={doc.icon} size={17} />
-                                    </span>
-                                    <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-medium text-slate-900">
-                                            {doc.label}
-                                            <span className="text-rose-600" aria-hidden="true"> *</span>
-                                        </p>
-                                        <p className="mt-0.5 text-xs text-slate-500">{doc.hint}</p>
-                                    </div>
-                                </div>
-
-                                {meta ? (
-                                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2">
-                                        <div className="min-w-0">
-                                            <p className="truncate text-xs font-medium text-slate-700">{meta.name}</p>
-                                            <p className="text-xs text-slate-500">{fmtSize(meta.size)}</p>
-                                        </div>
-                                        <div className="flex shrink-0 items-center gap-1">
-                                            {meta.url ? (
-                                                <a
-                                                    href={meta.url}
-                                                    className="rounded-md px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:underline"
-                                                >
-                                                    Télécharger
-                                                </a>
-                                            ) : null}
-                                            {meta.existing ? (
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => fileInputs.current[doc.key]?.click()}
-                                                    disabled={busy}
-                                                >
-                                                    Remplacer
-                                                </Button>
-                                            ) : (
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => removeUpload(doc.key)}
-                                                    disabled={busy}
-                                                >
-                                                    Retirer
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        icon="upload"
-                                        className="mt-3"
-                                        loading={busy}
-                                        onClick={() => fileInputs.current[doc.key]?.click()}
-                                    >
-                                        Téléverser le fichier
-                                    </Button>
+                            <button
+                                key={key}
+                                type="button"
+                                role="tab"
+                                aria-selected={active}
+                                onClick={() => setActiveTruckKey(key)}
+                                className={cn(
+                                    'flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+                                    active
+                                        ? 'border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-200'
+                                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
                                 )}
-
-                                {busy ? <p className="mt-2 text-xs text-slate-500">Téléversement en cours…</p> : null}
-                                {error ? <p className="mt-2 text-sm text-rose-700">{error}</p> : null}
-
-                                <input
-                                    ref={(element) => { fileInputs.current[doc.key] = element; }}
-                                    type="file"
-                                    accept=".pdf,.jpg,.jpeg,.png,.webp"
-                                    className="sr-only"
-                                    onChange={(event) => upload(doc.key, event.target.files?.[0])}
-                                />
-                            </div>
+                            >
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                                    {index + 1}
+                                </span>
+                                <span className="font-medium">Camion {index + 1}</span>
+                                {truck.vehicle?.tractor ? (
+                                    <span className="font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
+                                ) : null}
+                                <Badge tone={complete === DOCS.length ? 'ok' : 'neutral'}>{complete}/{DOCS.length}</Badge>
+                            </button>
                         );
                     })}
                 </div>
+
+                {selectedTruck ? (
+                    <TruckDocuments
+                        truck={selectedTruck}
+                        index={selectedTruckIndex}
+                        truckKey={selectedTruckKey}
+                        docs={form.data.docs?.[selectedTruckKey] || {}}
+                        uploaded={uploaded}
+                        uploading={uploading}
+                        uploadErrors={uploadErrors}
+                        errors={form.errors}
+                        fileInputs={fileInputs}
+                        onUpload={(type, file) => upload(selectedTruckKey, type, file)}
+                        onRemove={(type) => removeUpload(selectedTruckKey, type)}
+                    />
+                ) : null}
             </Card>
             </div>
 
@@ -1006,7 +1042,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                 <p className="text-sm text-slate-500">
                     {uploadingAny
                         ? 'Attendez la fin des téléversements avant d’envoyer.'
-                        : `${fmtInt(form.data.trucks.length)} camion${form.data.trucks.length > 1 ? 's' : ''} · ${DOCS.filter((doc) => form.data.docs[doc.key]).length}/${DOCS.length} documents`}
+                        : `${fmtInt(form.data.trucks.length)} camion${form.data.trucks.length > 1 ? 's' : ''} · ${totalDocs}/${expectedDocs} documents`}
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                     <Link href={route('transporteur.demandes.index')} className={buttonClass({ variant: 'secondary' })}>
