@@ -21,7 +21,7 @@ abstract class DemandeRdvRequest extends FormRequest
     {
         $rules = [
             'op' => ['required', Rule::in(DemandeRdv::OPERATIONS)],
-            'terminal' => ['required', Rule::in(DemandeRdv::TERMINALS)],
+            'terminal' => ['required', 'string', 'max:20'],
             'date' => ['required', 'date_format:Y-m-d'],
             'start' => ['required', 'date_format:H:i'],
             'notes' => ['nullable', 'string', 'max:1000'],

@@ -17,6 +17,7 @@ class Creneau extends Model
     protected $table = 'creneaux';
 
     protected $fillable = [
+        'terminal_id',
         'code',
         'date',
         'start',
@@ -37,20 +38,29 @@ class Creneau extends Model
     {
         static::creating(function (Creneau $creneau) {
             if (empty($creneau->code)) {
-                $creneau->code = static::generateCode($creneau->date, $creneau->start);
+                $terminalCode = $creneau->terminal?->code
+                    ?? Terminal::find($creneau->terminal_id)?->code
+                    ?? 'GEN';
+                $creneau->code = static::generateCode($creneau->date, $creneau->start, $terminalCode);
             }
         });
     }
 
-    public static function generateCode($date, string $start): string
+    public static function generateCode($date, string $start, string $terminalCode = 'GEN'): string
     {
         $dateStr = $date instanceof Carbon
             ? $date->format('Ymd')
             : str_replace('-', '', (string) substr((string) $date, 0, 10));
 
         $startStr = str_replace(':', '', $start);
+        $cleanTerminal = strtoupper(preg_replace('/[^A-Z0-9]/', '', $terminalCode)) ?: 'GEN';
 
-        return "S-{$dateStr}-{$startStr}";
+        return "S-{$cleanTerminal}-{$dateStr}-{$startStr}";
+    }
+
+    public function terminal(): BelongsTo
+    {
+        return $this->belongsTo(Terminal::class, 'terminal_id');
     }
 
     public function creator(): BelongsTo
@@ -78,10 +88,15 @@ class Creneau extends Model
         );
     }
 
-    public function scopeForWeek(Builder $query, string $from, string $to): Builder
+    public function scopeForWeek(Builder $query, string $from, string $to, ?int $terminalId = null): Builder
     {
-        return $query->whereBetween('date', [$from, $to])
-            ->orderBy('date')
+        $query->whereBetween('date', [$from, $to]);
+
+        if ($terminalId !== null) {
+            $query->where('terminal_id', $terminalId);
+        }
+
+        return $query->orderBy('date')
             ->orderBy('start');
     }
 }

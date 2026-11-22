@@ -4,7 +4,7 @@ import { Badge, PageHeader, buttonClass } from '@/Components/ui';
 import DemandeForm from './DemandeForm';
 import { statusMeta } from './status';
 
-export default function Edit({ demande, slots, me }) {
+export default function Edit({ demande, slots, terminals = [], me }) {
     const status = statusMeta(demande.status);
 
     return (
@@ -28,7 +28,7 @@ export default function Edit({ demande, slots, me }) {
                 )}
             />
 
-            <DemandeForm mode="edit" demande={demande} slots={slots} me={me} />
+            <DemandeForm mode="edit" demande={demande} slots={slots} terminals={terminals} me={me} />
         </TransporteurLayout>
     );
 }

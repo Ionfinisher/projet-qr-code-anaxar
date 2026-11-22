@@ -4,7 +4,7 @@ import { TransporteurLayout } from '@/Layouts/TransporteurLayout';
 import DemandeForm from './DemandeForm';
 import { ModePick } from '@/features/transporteur/components/wizard/ModePick';
 
-export default function Create({ slots, initialSlot, me }) {
+export default function Create({ slots, terminals = [], initialSlot, me }) {
     const [truckMode, setTruckMode] = useState(null);
 
     return (
@@ -15,6 +15,7 @@ export default function Create({ slots, initialSlot, me }) {
                     mode="create"
                     truckMode={truckMode}
                     slots={slots}
+                    terminals={terminals}
                     initialSlot={initialSlot}
                     me={me}
                 />

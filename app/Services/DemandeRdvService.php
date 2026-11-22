@@ -29,7 +29,7 @@ class DemandeRdvService
         $pathsToDelete = [];
 
         $demande = DB::transaction(function () use ($user, $data, &$pathsToDelete) {
-            $creneau = $this->resolveSlot($data['date'], $data['start']);
+            $creneau = $this->resolveSlot($data['date'], $data['start'], $data['terminal']);
             $trucks = $data['trucks'];
             $this->assertBookable($creneau, count($trucks), null);
 
@@ -65,7 +65,7 @@ class DemandeRdvService
 
         return DB::transaction(function () use ($demande, $data, $user, &$pathsToDelete) {
             $locked = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
-            $creneau = $this->resolveSlot($data['date'], $data['start']);
+            $creneau = $this->resolveSlot($data['date'], $data['start'], $data['terminal']);
             $trucks = $data['trucks'];
             $this->assertBookable($creneau, count($trucks), $locked->id);
 
@@ -187,17 +187,25 @@ class DemandeRdvService
         return $demande;
     }
 
-    private function resolveSlot(string $date, string $start): Creneau
+    private function resolveSlot(string $date, string $start, ?string $terminalCode = null): Creneau
     {
-        $creneau = Creneau::query()
+        $query = Creneau::query()
             ->where('date', $date)
-            ->where('start', $start)
-            ->lockForUpdate()
-            ->first();
+            ->where('start', $start);
+
+        if ($terminalCode !== null && $terminalCode !== '') {
+            $query->where(function ($q) use ($terminalCode) {
+                $q->whereHas('terminal', function ($tq) use ($terminalCode) {
+                    $tq->where('code', $terminalCode);
+                })->orWhereNull('terminal_id');
+            });
+        }
+
+        $creneau = $query->lockForUpdate()->first();
 
         if (! $creneau) {
             throw ValidationException::withMessages([
-                'slot' => 'Ce créneau n’existe plus : choisissez-en un autre.',
+                'slot' => 'Ce créneau n’existe plus ou n’est pas disponible pour ce terminal : choisissez-en un autre.',
             ]);
         }
 

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Creneau;
+use App\Models\Terminal;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,11 +55,13 @@ class AdminCreneauManagementTest extends TestCase
     public function test_admin_can_batch_create_creneaux(): void
     {
         $admin = $this->createAdmin();
+        $terminal = Terminal::factory()->create();
 
         $from = Carbon::now()->startOfWeek()->format('Y-m-d');
         $to = Carbon::now()->startOfWeek()->addDays(2)->format('Y-m-d');
 
         $response = $this->actingAs($admin)->post(route('admin.creneaux.batch'), [
+            'terminal_id' => $terminal->id,
             'from' => $from,
             'to' => $to,
             'days' => [1, 2, 3], // Mon, Tue, Wed
@@ -74,6 +77,7 @@ class AdminCreneauManagementTest extends TestCase
         // 3 days * 2 slots per day (08:00-10:00, 10:00-12:00) = 6 slots
         $this->assertDatabaseCount('creneaux', 6);
         $this->assertDatabaseHas('creneaux', [
+            'terminal_id' => $terminal->id,
             'date' => $from,
             'start' => '08:00',
             'end' => '10:00',
@@ -85,10 +89,12 @@ class AdminCreneauManagementTest extends TestCase
     public function test_batch_creation_skips_overlapping_slots(): void
     {
         $admin = $this->createAdmin();
+        $terminal = Terminal::factory()->create();
         $date = Carbon::now()->startOfWeek()->format('Y-m-d');
 
         // Pre-create a slot
         Creneau::create([
+            'terminal_id' => $terminal->id,
             'date' => $date,
             'start' => '08:00',
             'end' => '10:00',
@@ -99,6 +105,7 @@ class AdminCreneauManagementTest extends TestCase
         // Attempt to create slots including 08:00-10:00
         $dayOfWeek = Carbon::parse($date)->dayOfWeek;
         $response = $this->actingAs($admin)->post(route('admin.creneaux.batch'), [
+            'terminal_id' => $terminal->id,
             'from' => $date,
             'to' => $date,
             'days' => [$dayOfWeek],

@@ -18,12 +18,13 @@ const DAY_LABELS = [
     { value: 0, label: 'Dim' },
 ];
 
-export function AddSlotsDrawer({ open, lastDate, onClose }) {
+export function AddSlotsDrawer({ open, terminals = [], selectedTerminalId, lastDate, onClose }) {
     const today = dayStr();
     const defaultFrom = lastDate && lastDate >= today ? addDays(lastDate, 1) : today;
     const defaultTo = addDays(defaultFrom, 6);
 
     const { data, setData, post, processing, errors, reset } = useForm({
+        terminal_id: selectedTerminalId || (terminals[0]?.id ?? ''),
         from: defaultFrom,
         to: defaultTo,
         days: [1, 2, 3, 4, 5, 6],
@@ -116,6 +117,23 @@ export function AddSlotsDrawer({ open, lastDate, onClose }) {
             }
         >
             <form onSubmit={submit} className="flex flex-col gap-5">
+                {terminals.length > 0 && (
+                    <Field id="as-terminal" label="Terminal" required error={errors.terminal_id}>
+                        <Select
+                            id="as-terminal"
+                            value={data.terminal_id}
+                            onChange={(e) => setData('terminal_id', Number(e.target.value))}
+                            required
+                        >
+                            {terminals.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                    {t.code} — {t.label} ({t.short})
+                                </option>
+                            ))}
+                        </Select>
+                    </Field>
+                )}
+
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <Field id="as-from" label="Du" required error={errors.from}>
                         <Input

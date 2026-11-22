@@ -22,13 +22,18 @@ class CreneauCalendarService
         User $user,
         int $days = 14,
         ?int $exceptDemandeId = null,
-        ?Creneau $include = null
+        ?Creneau $include = null,
+        ?int $terminalId = null
     ): array {
         $days = max(1, min(60, $days));
         $from = now()->format('Y-m-d');
         $to = now()->addDays($days - 1)->format('Y-m-d');
 
-        $slots = Creneau::query()->forWeek($from, $to)->get();
+        $query = Creneau::query()->with('terminal');
+        if ($terminalId !== null) {
+            $query->where('terminal_id', $terminalId);
+        }
+        $slots = $query->forWeek($from, $to)->get();
 
         if ($include && ! $slots->contains('id', $include->id)) {
             $slots->push($include);
@@ -49,6 +54,8 @@ class CreneauCalendarService
 
             return [
                 'id' => $slot->id,
+                'terminal_id' => $slot->terminal_id,
+                'terminal_code' => $slot->terminal?->code,
                 'code' => $slot->code,
                 'date' => $slot->date->format('Y-m-d'),
                 'start' => $slot->start,

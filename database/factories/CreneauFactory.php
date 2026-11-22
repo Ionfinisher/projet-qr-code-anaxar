@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Creneau;
+use App\Models\Terminal;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -18,6 +19,7 @@ class CreneauFactory extends Factory
         $start = fake()->randomElement(['08:00', '10:00', '12:00', '14:00', '16:00']);
 
         return [
+            'terminal_id' => Terminal::query()->first()?->id ?? Terminal::factory(),
             'date' => now()->addDay()->format('Y-m-d'),
             'start' => $start,
             'end' => Carbon::createFromFormat('H:i', $start)->addHours(2)->format('H:i'),

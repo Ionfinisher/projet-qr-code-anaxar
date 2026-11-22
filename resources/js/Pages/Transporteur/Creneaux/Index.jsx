@@ -13,7 +13,7 @@ function slotBadge(slot) {
     return { tone: 'ok', label: `${slot.remaining} place${slot.remaining > 1 ? 's' : ''}`, icon: 'circle-check' };
 }
 
-export default function Index({ slots }) {
+export default function Index({ slots, terminals = [], selected_terminal_id }) {
     const days = useMemo(() => {
         const map = new Map();
 
@@ -46,6 +46,36 @@ export default function Index({ slots }) {
                     </>
                 )}
             />
+
+            {terminals.length > 0 && (
+                <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 mr-1">
+                        Terminal :
+                    </span>
+                    {terminals.map((t) => {
+                        const selected = t.id === selected_terminal_id;
+                        return (
+                            <Link
+                                key={t.id}
+                                href={route('transporteur.creneaux.index', { terminal_id: t.id })}
+                                preserveState
+                                preserveScroll
+                                className={cn(
+                                    'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all',
+                                    selected
+                                        ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-700'
+                                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                                )}
+                            >
+                                <span>{t.code}</span>
+                                <span className={cn('text-[11px] font-normal', selected ? 'text-brand-100' : 'text-slate-400')}>
+                                    ({t.short})
+                                </span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            )}
 
             {days.length === 0 ? (
                 <EmptyState

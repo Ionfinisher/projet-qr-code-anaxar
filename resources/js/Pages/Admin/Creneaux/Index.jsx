@@ -8,6 +8,7 @@ import { addDays, dayStr, fmtDayLong, fmtDayNum, fmtInt } from '@/Lib/domain';
 import { WeekGrid } from './WeekGrid';
 import { SlotDrawer } from './SlotDrawer';
 import { AddSlotsDrawer } from './AddSlotsDrawer';
+import { cn } from '@/Lib/cn';
 
 const MONTH = new Intl.DateTimeFormat('fr-FR', { month: 'short', timeZone: 'UTC' });
 const noon = (d) => new Date(d + 'T12:00:00Z');
@@ -26,18 +27,26 @@ const mondayOf = (d) => {
     return addDays(d, -day);
 };
 
-export default function Index({ auth, week, days = [], slots = [], stats = {} }) {
+export default function Index({ auth, week, days = [], slots = [], terminals = [], selected_terminal_id, stats = {} }) {
     const today = dayStr();
     const currentWeekMonday = mondayOf(today);
 
     const [openSlot, setOpenSlot] = useState(null);
     const [adding, setAdding] = useState(false);
 
+    const changeTerminal = (terminalId) => {
+        router.get(
+            route('admin.creneaux.index'),
+            { week, terminal_id: terminalId },
+            { preserveState: true, preserveScroll: true }
+        );
+    };
+
     const changeWeek = (offsetDays) => {
         const target = addDays(week, offsetDays);
         router.get(
             route('admin.creneaux.index'),
-            { week: target },
+            { week: target, terminal_id: selected_terminal_id },
             { preserveState: true, preserveScroll: true }
         );
     };
@@ -45,7 +54,7 @@ export default function Index({ auth, week, days = [], slots = [], stats = {} })
     const goToCurrentWeek = () => {
         router.get(
             route('admin.creneaux.index'),
-            { week: currentWeekMonday },
+            { week: currentWeekMonday, terminal_id: selected_terminal_id },
             { preserveState: true, preserveScroll: true }
         );
     };
@@ -56,6 +65,8 @@ export default function Index({ auth, week, days = [], slots = [], stats = {} })
         </Button>
     );
 
+    const activeTerminal = terminals.find((t) => t.id === selected_terminal_id);
+
     return (
         <AuthenticatedLayout user={auth.user}>
             <Head title="Gestion des créneaux" />
@@ -63,12 +74,42 @@ export default function Index({ auth, week, days = [], slots = [], stats = {} })
             <div className="flex flex-col gap-5">
                 <PageHeader
                     title="Créneaux"
-                    subtitle={`Porte principale · plan ouvert jusqu’au ${fmtDayLong(
+                    subtitle={`${activeTerminal ? `${activeTerminal.label} (${activeTerminal.code})` : 'Tous les terminaux'} · plan ouvert jusqu’au ${fmtDayLong(
                         (stats.last_date || today) + 'T12:00:00Z'
                     )}`}
                     actions={addAction}
                     className="mb-0"
                 />
+
+                {/* Terminals Tabs */}
+                {terminals.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-slate-500 mr-1">
+                            Terminal :
+                        </span>
+                        {terminals.map((t) => {
+                            const selected = t.id === selected_terminal_id;
+                            return (
+                                <button
+                                    key={t.id}
+                                    type="button"
+                                    onClick={() => changeTerminal(t.id)}
+                                    className={cn(
+                                        'inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all',
+                                        selected
+                                            ? 'bg-brand-600 text-white shadow-sm ring-1 ring-brand-700'
+                                            : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300'
+                                    )}
+                                >
+                                    <span>{t.code}</span>
+                                    <span className={cn('text-[11px] font-normal', selected ? 'text-brand-100' : 'text-slate-400')}>
+                                        ({t.short})
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
 
                 {/* Week Navigation Toolbar & Stats */}
                 <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:p-4">
@@ -146,6 +187,8 @@ export default function Index({ auth, week, days = [], slots = [], stats = {} })
 
                 <AddSlotsDrawer
                     open={adding}
+                    terminals={terminals}
+                    selectedTerminalId={selected_terminal_id}
                     lastDate={stats.last_date}
                     onClose={() => setAdding(false)}
                 />

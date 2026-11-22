@@ -176,7 +176,7 @@ function fromInitialSlot(initialSlot, truckMode) {
     };
 }
 
-export default function DemandeForm({ mode = 'create', truckMode = 'single', demande = null, slots = [], initialSlot = null, me }) {
+export default function DemandeForm({ mode = 'create', truckMode = 'single', demande = null, slots = [], terminals = [], initialSlot = null, me }) {
     const isTransit = me?.acct === 'transit';
     const form = useForm(demande ? fromDemande(demande) : fromInitialSlot(initialSlot, truckMode));
     const [step, setStep] = useState(0);
@@ -622,6 +622,7 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                 <InertiaStepSlot
                     form={form}
                     slots={slots}
+                    terminals={terminals}
                     truckCount={form.data.trucks.length}
                     isTransit={isTransit}
                 />

@@ -76,8 +76,44 @@ function SlotPicker({ slots, value, onPick, need }) {
     );
 }
 
-export default function InertiaStepSlot({ form, slots, truckCount, isTransit }) {
+export default function InertiaStepSlot({ form, slots, terminals = [], truckCount, isTransit }) {
     const selected = form.data.slot;
+
+    // Build terminal options dynamically from props or fallback to TERMINALS constant
+    const terminalOptions = useMemo(() => {
+        if (terminals && terminals.length > 0) {
+            return terminals.map((t) => ({
+                value: t.code,
+                label: t.label,
+                description: `Port de Lomé · ${t.short}`,
+            }));
+        }
+        return Object.entries(TERMINALS).map(([value, terminal]) => ({
+            value,
+            label: terminal.label,
+            description: 'Port de Lomé · TGLFW',
+        }));
+    }, [terminals]);
+
+    // Filter slots by the selected terminal
+    const filteredSlots = useMemo(() => {
+        const curTerminal = form.data.terminal;
+        if (!curTerminal) return slots;
+        return slots.filter((s) => !s.terminal_code || s.terminal_code === curTerminal);
+    }, [slots, form.data.terminal]);
+
+    const handleTerminalChange = (newTerminal) => {
+        form.setData((prev) => {
+            // Check if current selected slot belongs to the new terminal
+            const slotMatch = prev.slot ? slots.find((s) => `${s.date}|${s.start}` === prev.slot) : null;
+            const keepSlot = slotMatch && (!slotMatch.terminal_code || slotMatch.terminal_code === newTerminal);
+            return {
+                ...prev,
+                terminal: newTerminal,
+                slot: keepSlot ? prev.slot : '',
+            };
+        });
+    };
 
     return (
         <div className="flex flex-col gap-5">
@@ -94,8 +130,8 @@ export default function InertiaStepSlot({ form, slots, truckCount, isTransit }) 
                     label="Terminal"
                     columns={3}
                     value={form.data.terminal}
-                    onChange={(value) => form.setData('terminal', value)}
-                    options={Object.entries(TERMINALS).map(([value, terminal]) => ({ value, label: terminal.label, description: 'Port de Lomé · TGLFW' }))}
+                    onChange={handleTerminalChange}
+                    options={terminalOptions}
                 />
             </section>
             {!isTransit ? (
@@ -106,12 +142,12 @@ export default function InertiaStepSlot({ form, slots, truckCount, isTransit }) 
             <section className="flex flex-col gap-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">Date et créneau</h2>
                 <SlotPicker
-                    slots={slots}
+                    slots={filteredSlots}
                     value={selected}
                     need={truckCount}
                     onPick={(slot) => form.setData('slot', `${slot.date}|${slot.start}`)}
                 />
-                {form.errors.slot ? <p role="alert" className="text-sm text-rose-700">{form.errors.slot}</p> : <p className="text-sm text-slate-500">Places restantes en temps réel · {truckCount} place{truckCount > 1 ? 's' : ''} nécessaire{truckCount > 1 ? 's' : ''}. Tolérance de 15 min à la guérite.</p>}
+                {form.errors.slot ? <p role="alert" className="text-sm text-rose-700">{form.errors.slot}</p> : <p className="text-sm text-slate-500">Places restantes en temps réel pour le terminal {form.data.terminal} · {truckCount} place{truckCount > 1 ? 's' : ''} nécessaire{truckCount > 1 ? 's' : ''}. Tolérance de 15 min à la guérite.</p>}
                 <Field id="notes" label="Instructions particulières" optional hint="Conteneur frigorifique à brancher, hors gabarit, marchandises dangereuses (classe IMDG)…">
                     <Textarea id="notes" rows={3} maxLength={1000} value={form.data.notes} onChange={(event) => form.setData('notes', event.target.value)} />
                 </Field>

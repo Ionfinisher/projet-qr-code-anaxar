@@ -37,6 +37,13 @@ class PermissionSeeder extends Seeder
             'creneaux.modifier',
             'creneaux.supprimer',
 
+            // Table terminals (gestion des terminaux portuaires)
+            'terminaux.consulter',
+            'terminaux.gerer',
+            'terminaux.creer',
+            'terminaux.modifier',
+            'terminaux.supprimer',
+
             // Table users (gestion des comptes utilisateurs)
             'utilisateurs.consulter',
             'utilisateurs.gerer',

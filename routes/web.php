@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\DemandeRdvController as AdminDemandeRdvController;
 use App\Http\Controllers\Admin\RdvController as AdminRdvController;
 use App\Http\Controllers\Admin\ProfileController as AdminProfileController;
+use App\Http\Controllers\Admin\TerminalController as AdminTerminalController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\CompanyUserController;
@@ -77,6 +78,11 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
         ->name('demandes.documents.download');
 
     Route::get('/rendez-vous', [AdminRdvController::class, 'index'])->name('rdv.index');
+
+    Route::get('/terminals', [AdminTerminalController::class, 'index'])->name('terminals.index');
+    Route::post('/terminals', [AdminTerminalController::class, 'store'])->name('terminals.store');
+    Route::put('/terminals/{terminal}', [AdminTerminalController::class, 'update'])->name('terminals.update');
+    Route::delete('/terminals/{terminal}', [AdminTerminalController::class, 'destroy'])->name('terminals.destroy');
 
     Route::get('/profils', [AdminProfileController::class, 'index'])->name('profils.index');
     Route::post('/profils', [AdminProfileController::class, 'store'])->name('profils.store');

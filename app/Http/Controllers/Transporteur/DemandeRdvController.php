@@ -132,6 +132,7 @@ class DemandeRdvController extends Controller
     public function create(Request $request): Response
     {
         $user = $request->user();
+        $terminals = \App\Models\Terminal::query()->active()->orderBy('code')->get(['id', 'code', 'short', 'label']);
         $slots = $this->calendar->upcoming($user);
         $initialSlot = null;
         $date = $request->query('date');
@@ -153,6 +154,7 @@ class DemandeRdvController extends Controller
 
         return Inertia::render('Transporteur/Demandes/Create', [
             'slots' => $slots,
+            'terminals' => $terminals,
             'initialSlot' => $initialSlot,
             'me' => TransporteurPresenter::me($user),
         ]);
@@ -172,6 +174,7 @@ class DemandeRdvController extends Controller
         $this->authorize('update', $demande);
 
         $demande->load(['creneau', 'camions.documents']);
+        $terminals = \App\Models\Terminal::query()->active()->orderBy('code')->get(['id', 'code', 'short', 'label']);
 
         return Inertia::render('Transporteur/Demandes/Edit', [
             'demande' => DemandeRdvPresenter::form($demande),
@@ -181,6 +184,7 @@ class DemandeRdvController extends Controller
                 $demande->id,
                 $demande->creneau
             ),
+            'terminals' => $terminals,
             'me' => TransporteurPresenter::me($request->user()),
         ]);
     }

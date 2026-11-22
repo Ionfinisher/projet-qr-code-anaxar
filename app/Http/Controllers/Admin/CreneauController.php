@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Creneau;
+use App\Models\Terminal;
 use App\Services\CreneauUsageService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -19,6 +20,14 @@ class CreneauController extends Controller
 
     public function index(Request $request): Response
     {
+        $terminals = Terminal::query()->orderBy('code')->get(['id', 'code', 'short', 'label', 'statut']);
+        $terminalParam = $request->query('terminal_id');
+        $selectedTerminal = $terminalParam
+            ? $terminals->firstWhere('id', (int) $terminalParam)
+            : ($terminals->firstWhere('statut', 'active') ?? $terminals->first());
+
+        $terminalId = $selectedTerminal?->id;
+
         $weekParam = $request->query('week');
         $weekStart = $weekParam
             ? Carbon::parse($weekParam)->startOfWeek(Carbon::MONDAY)
@@ -29,14 +38,23 @@ class CreneauController extends Controller
             $days[] = $weekStart->copy()->addDays($i)->format('Y-m-d');
         }
 
-        $slotModels = Creneau::query()
-            ->forWeek($days[0], $days[6])
-            ->get();
+        $query = Creneau::query()->with('terminal');
+        if ($terminalId) {
+            $query->where('terminal_id', $terminalId);
+        }
+        $slotModels = $query->forWeek($days[0], $days[6])->get();
 
         $usage = $this->usage->forCreneaux($slotModels);
 
         $slots = $slotModels->map(fn (Creneau $slot) => [
             'id' => $slot->id,
+            'terminal_id' => $slot->terminal_id,
+            'terminal' => $slot->terminal ? [
+                'id' => $slot->terminal->id,
+                'code' => $slot->terminal->code,
+                'short' => $slot->terminal->short,
+                'label' => $slot->terminal->label,
+            ] : null,
             'code' => $slot->code,
             'date' => $slot->date->format('Y-m-d'),
             'start' => $slot->start,
@@ -55,7 +73,11 @@ class CreneauController extends Controller
         $totalUsed = $openSlots->sum('used');
         $reservedPercentage = $totalCapacity > 0 ? (int) round(($totalUsed / $totalCapacity) * 100) : 0;
 
-        $lastDate = Creneau::max('date');
+        $lastDateQuery = Creneau::query();
+        if ($terminalId) {
+            $lastDateQuery->where('terminal_id', $terminalId);
+        }
+        $lastDate = $lastDateQuery->max('date');
         if ($lastDate instanceof Carbon) {
             $lastDate = $lastDate->format('Y-m-d');
         } elseif (! $lastDate) {
@@ -66,6 +88,8 @@ class CreneauController extends Controller
             'week' => $days[0],
             'days' => $days,
             'slots' => $slots,
+            'terminals' => $terminals,
+            'selected_terminal_id' => $terminalId,
             'stats' => [
                 'total_slots' => $totalSlots,
                 'total_capacity' => $totalCapacity,
@@ -79,6 +103,7 @@ class CreneauController extends Controller
     public function batchStore(Request $request): RedirectResponse
     {
         $validated = $request->validate([
+            'terminal_id' => ['required', 'integer', 'exists:terminals,id'],
             'from' => ['required', 'date'],
             'to' => ['required', 'date', 'after_or_equal:from'],
             'days' => ['required', 'array', 'min:1'],
@@ -89,6 +114,7 @@ class CreneauController extends Controller
             'capacity' => ['required', 'integer', 'between:1,500'],
         ]);
 
+        $terminalId = (int) $validated['terminal_id'];
         $from = Carbon::parse($validated['from']);
         $to = Carbon::parse($validated['to']);
         $selectedDays = array_map('intval', $validated['days']);
@@ -115,7 +141,8 @@ class CreneauController extends Controller
                     $start = sprintf('%02d:00', $h);
                     $end = sprintf('%02d:00', $h + $duration);
 
-                    $exists = Creneau::where('date', $dateStr)
+                    $exists = Creneau::where('terminal_id', $terminalId)
+                        ->where('date', $dateStr)
                         ->where(function ($q) use ($start, $end) {
                             $q->where('start', '<', $end)
                               ->where('end', '>', $start);
@@ -128,6 +155,7 @@ class CreneauController extends Controller
                     }
 
                     Creneau::create([
+                        'terminal_id' => $terminalId,
                         'date' => $dateStr,
                         'start' => $start,
                         'end' => $end,
@@ -146,7 +174,12 @@ class CreneauController extends Controller
             $msg .= " ({$skipped} ignoré" . ($skipped > 1 ? 's' : '') . ' car existant' . ($skipped > 1 ? 's' : '') . ')';
         }
 
-        return back()->with('success', $msg);
+        return redirect()
+            ->route('admin.creneaux.index', [
+                'terminal_id' => $terminalId,
+                'week' => $from->startOfWeek(Carbon::MONDAY)->format('Y-m-d'),
+            ])
+            ->with('success', $msg);
     }
 
     public function update(Request $request, Creneau $creneau): RedirectResponse

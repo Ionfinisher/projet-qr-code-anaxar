@@ -118,6 +118,14 @@ export default function AuthenticatedLayout({ user: propUser, header, children }
             visible: !!user?.is_admin && routeExists('admin.creneaux.index'),
         },
         {
+            key: 'terminals',
+            label: 'Terminaux',
+            href: routeExists('admin.terminals.index') ? route('admin.terminals.index') : '#',
+            active: isCurrent('admin.terminals.*'),
+            icon: 'anchor',
+            visible: !!user?.is_admin && routeExists('admin.terminals.index'),
+        },
+        {
             key: 'users',
             label: 'Utilisateurs',
             href: routeExists('admin.utilisateurs.index') ? route('admin.utilisateurs.index') : '#',
