@@ -174,7 +174,8 @@ Couverture fonctionnelle : inscription dynamique avec pièces, pièce obligatoir
 manquante, type de fichier invalide, connexion bloquée/autorisée, vérification
 email, approbation/rejet administrateur, resoumission d'un dossier rejeté et
 proxy d'autocomplétion des villes et adresses (validation, cache, dégradation
-gracieuse).
+gracieuse). L'API mobile est couverte par `MobileAuthApiTest.php`,
+`MobileScanApiTest.php`, `QrJwsVerifierTest.php` et `RdvIdTest.php`.
 
 Pour les documents par camion, la suite dédiée est :
 
@@ -233,6 +234,57 @@ les demandes multi-camions.
 | POST | `/transporteur/uploads` | Téléverser un document avec `truck_key` |
 | GET | `/transporteur/demandes/{demande}/documents/{document}/telecharger` | Télécharger un document (transporteur) |
 | GET | `/admin/demandes/{demande}/documents/{document}/telecharger` | Télécharger un document (admin) |
+| POST | `/api/v1/login` | Connexion mobile (token Sanctum 12 h) |
+| POST | `/api/v1/scan` | Vérifier un QR et retourner le dossier en lecture seule |
+| POST | `/api/v1/logout` | Révoquer le token courant |
+
+## API mobile
+
+Préfixe : `/api/v1`. Trois endpoints seulement. `login` est public ; `scan` et
+`logout` exigent l'en-tête `Authorization: Bearer <access_token>` et un compte
+`admin` actif, approuvé et sans changement de mot de passe forcé. **Cet état est
+revérifié à chaque requête** : un token émis reste valable 12 heures au maximum,
+mais il est rejeté avec un 403 dès que le compte est désactivé, non approuvé,
+soumis à un changement de mot de passe ou privé du rôle admin. Le token Sanctum
+`mobile` porte la seule capacité `mobile.access` ; le champ `expires_at` de la
+réponse de login est au format ISO 8601.
+
+| Méthode | URL | Paramètres (JSON) | Réponse |
+|---------|-----|-------------------|---------|
+| POST | `/api/v1/login` | `email`, `password` | `access_token`, `token_type: "Bearer"`, `expires_at`, `user` (`id`, `name`, `email`, `roles`) |
+| POST | `/api/v1/scan` | `token` (JWS en 3 segments base64url, 4096 car. max) | Dossier complet : `rdv_id`, `demande`, `truck`, 6 `documents`, `checks` |
+| POST | `/api/v1/logout` | aucun | `{"message":"Déconnecté."}` |
+
+Le scan est **en lecture seule** : aucun fichier n'est téléchargé, aucun
+contrôle n'est enregistré, aucun événement n'est créé. Les six documents sont
+retournés dans l'ordre fixe `bc`, `bf`, `as`, `vt`, `gp`, `ta` avec leur poste,
+leur libellé, leurs métadonnées et leur contrôle éventuel (`null` sinon). La
+réponse n'expose ni URL de téléchargement, ni téléphone ni permis du chauffeur.
+Le champ `rdv_hash` des camions (indexé, calculé avec la position définitive)
+permet de retrouver le dossier ; les claims `op`, `trm`, `slt`, `lot` et `dh`
+sont recalculés côté serveur et doivent correspondre au créneau et aux
+documents.
+
+Codes d'erreur :
+
+| Code | Signification |
+|------|---------------|
+| 400 | QR invalide (`reason` : `format`, `encoding`, `header`, `claims`, `signature`, `timing`, `subject`, `mismatch`) |
+| 401 | Identifiants invalides (message identique pour email inconnu et mauvais mot de passe) ou token absent/invalide/révoqué |
+| 403 | Compte non admin, inactif, non approuvé, changement de mot de passe requis, ou token sans capacité `mobile.access` |
+| 404 | Aucun dossier correspondant au QR (`Dossier introuvable.`) |
+| 422 | Validation FormRequest (`token` absent/mal formé) ou identifiant QR ambigu |
+| 429 | Limite atteinte : 5 échecs de login par email+IP, 10 requêtes/min sur `login`, 30 scans/min par utilisateur ; en-tête `Retry-After` |
+
+> **Limitation connue et héritée :** le générateur signe actuellement en
+> HMAC-SHA256 avec la chaîne brute `APP_KEY` tout en annonçant `alg: ES256`
+> dans l'en-tête JWS, alors que le vérificateur historique
+> (`resources/js/Lib/domain.js`) attend une vraie signature ECDSA P-256. Le
+> vérificateur serveur applique cette même convention HMAC en whitelistant
+> `alg` et `kid` (`pf-2026`). Le scan valide donc les QR produits par
+> l'application, mais une vérification ES256 conforme nécessite une migration
+> de clés (private key serveur + JWK public) hors du périmètre de cette
+> évolution.
 
 ## Structure du projet
 
