@@ -17,7 +17,10 @@ class ScanController extends Controller
     public function scan(ScanRequest $request): JsonResponse
     {
         try {
-            return response()->json($this->scan->dossier((string) $request->validated('token')));
+            return response()->json($this->scan->dossier(
+                (string) $request->validated('token'),
+                $request->poste()
+            ));
         } catch (QrScanException $exception) {
             $body = ['message' => $exception->getMessage()];
 

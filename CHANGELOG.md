@@ -11,6 +11,9 @@ projet adhère au [versionnement sémantique](https://semver.org/lang/fr/).
 - API mobile sous `/api/v1` : login Sanctum (token `mobile` 12 h, capacité
   `mobile.access`), scan d'un QR signé retournant le dossier complet en lecture
   seule, et logout révoquant le token courant.
+- Scan mobile : paramètre optionnel `poste` (numéro 1-6 ou clé `bc`/`bf`/`as`/
+  `vt`/`gp`/`ta`, insensible à la casse) pour ne retourner que le document et
+  le contrôle de ce poste ; sans paramètre, les six documents restent retournés.
 - Migration `2026_11_24_000000_add_rdv_hash_to_demande_camions.php` : colonne
   `rdv_hash` nullable indexée, backfillée par lots à partir de la référence, de
   l'identifiant camion et de la position définitive.
@@ -90,6 +93,8 @@ projet adhère au [versionnement sémantique](https://semver.org/lang/fr/).
   `config('app.key')`), whitelist `alg`/`kid`, décodage base64url canonique et
   contrôle des claims `nbf`/`exp`/`sub` ; aucun token ni claim n'est journalisé.
 - Limitation du scan à 30 requêtes/minute par utilisateur, avec `Retry-After`.
+- Le filtrage par poste est appliqué après vérification des six empreintes `dh`
+  du QR : un document non affiché ne peut pas masquer une falsification.
 - Aucun secret de repli en dur pour la signature des QR : `APP_KEY` est
   obligatoire et une erreur explicite est levée si elle manque.
 - Un token d'upload ne peut être réutilisé pour un autre camion ou un autre

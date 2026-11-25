@@ -16,7 +16,7 @@ final class MobileDossierPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function dossier(DemandeCamion $camion, DemandeRdv $demande): array
+    public static function dossier(DemandeCamion $camion, DemandeRdv $demande, ?int $poste = null): array
     {
         $documents = $camion->relationLoaded('documents')
             ? $camion->documents
@@ -27,14 +27,19 @@ final class MobileDossierPresenter
         $checks = [];
 
         foreach (DemandeRdv::DOC_TYPES as $type) {
+            $documentPoste = Poste::posteFor($type);
+
+            if ($poste !== null && $documentPoste !== $poste) {
+                continue;
+            }
+
             $document = $documentsByType->get($type);
-            $poste = Poste::posteFor($type);
             $check = $document instanceof DemandeDocument ? self::check($document) : null;
 
             $presentedDocuments[] = [
-                'poste' => $poste,
+                'poste' => $documentPoste,
                 'type' => $type,
-                'label' => $poste !== null ? Poste::labelFor($poste) : null,
+                'label' => $documentPoste !== null ? Poste::labelFor($documentPoste) : null,
                 'id' => $document?->id,
                 'name' => $document?->original_name,
                 'mime' => $document?->mime,

@@ -9,6 +9,7 @@ use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\User;
 use App\Support\DemandeRdvPresenter;
+use App\Support\Poste;
 use App\Support\QrJwsVerifier;
 use App\Support\RdvId;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -122,9 +123,15 @@ class MobileScanApiTest extends TestCase
         return DemandeRdvPresenter::generateToken($demande, $camion);
     }
 
-    private function scan(string $token)
+    private function scan(string $token, int|string|null $poste = null)
     {
-        return $this->postJson(route('api.v1.scan'), ['token' => $token]);
+        $payload = ['token' => $token];
+
+        if ($poste !== null) {
+            $payload['poste'] = $poste;
+        }
+
+        return $this->postJson(route('api.v1.scan'), $payload);
     }
 
     /**
@@ -241,6 +248,105 @@ class MobileScanApiTest extends TestCase
         $this->assertStringNotContainsString('"url"', $content);
         $this->assertStringNotContainsString('"phone"', $content);
         $this->assertStringNotContainsString('"license"', $content);
+    }
+
+    public function test_scan_filters_documents_and_checks_by_poste(): void
+    {
+        $admin = $this->admin();
+        $this->authenticate($admin);
+        $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN12');
+        $camion = $this->truck($demande, 1);
+
+        $documents = [];
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $documents[$type] = $this->documentFor($camion, $type);
+        }
+        $documents['gp']->forceFill([
+            'check_result' => DemandeDocument::CHECK_PASSE,
+            'checked_at' => now(),
+            'checked_by' => $admin->id,
+        ])->save();
+
+        $token = $this->qr($demande, $camion);
+
+        $response = $this->scan($token, Poste::POSTE_GP)
+            ->assertOk()
+            ->assertJsonCount(1, 'documents')
+            ->assertJsonCount(1, 'checks')
+            ->assertJsonPath('rdv_id', RdvId::for($camion, $demande))
+            ->assertJsonPath('documents.0.poste', Poste::POSTE_GP)
+            ->assertJsonPath('documents.0.type', 'gp')
+            ->assertJsonPath('documents.0.id', $documents['gp']->id)
+            ->assertJsonPath('checks.gp.result', DemandeDocument::CHECK_PASSE);
+
+        $this->assertSame(['gp'], array_column($response->json('documents'), 'type'));
+        $this->assertArrayNotHasKey('bc', $response->json('checks'));
+
+        $this->scan($token, 'TA')
+            ->assertOk()
+            ->assertJsonCount(1, 'documents')
+            ->assertJsonPath('documents.0.type', 'ta');
+    }
+
+    public function test_scan_returns_an_empty_document_for_a_poste_without_document(): void
+    {
+        $this->authenticate($this->admin());
+        $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN14');
+        $camion = $this->truck($demande, 1);
+        $this->documentFor($camion, 'bc');
+
+        $this->scan($this->qr($demande, $camion), 'gp')
+            ->assertOk()
+            ->assertJsonCount(1, 'documents')
+            ->assertJsonPath('documents.0.poste', Poste::POSTE_GP)
+            ->assertJsonPath('documents.0.type', 'gp')
+            ->assertJsonPath('documents.0.id', null)
+            ->assertJsonPath('checks.gp', null);
+    }
+
+    public function test_scan_rejects_unknown_or_malformed_poste(): void
+    {
+        $this->authenticate($this->admin());
+        $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN15');
+        $camion = $this->truck($demande, 1);
+        $token = $this->qr($demande, $camion);
+
+        foreach ([0, 7, 'sup', '', '1.5'] as $poste) {
+            $this->scan($token, $poste)
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('poste');
+        }
+
+        foreach ([null, true, ['bc']] as $poste) {
+            $this->postJson(route('api.v1.scan'), ['token' => $token, 'poste' => $poste])
+                ->assertStatus(422)
+                ->assertJsonValidationErrors('poste');
+        }
+    }
+
+    public function test_filtered_scan_stays_read_only_and_verifies_every_document(): void
+    {
+        $this->authenticate($this->admin());
+        $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN13');
+        $camion = $this->truck($demande, 1);
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $this->documentFor($camion, $type);
+        }
+        $document = $camion->documents()->where('type', 'bc')->firstOrFail();
+        $token = $this->qr($demande, $camion);
+        $before = $document->updated_at->toIso8601String();
+
+        $this->scan($token, Poste::POSTE_BC)->assertOk();
+
+        $this->assertDatabaseCount('demande_evenements', 0);
+        $this->assertSame($before, $document->fresh()->updated_at->toIso8601String());
+
+        // L'empreinte d'un document non affiché reste vérifiée avant le filtrage.
+        $this->scan($this->resign($token, function (array &$claims): void {
+            $claims['dh'][5] = str_repeat('0', 8);
+        }), Poste::POSTE_BC)
+            ->assertStatus(400)
+            ->assertJsonPath('reason', 'mismatch');
     }
 
     public function test_scan_does_not_change_any_state(): void

@@ -53,4 +53,18 @@ class PosteTest extends TestCase
         $this->expectException(InvalidArgumentException::class);
         Poste::labelFor(7);
     }
+
+    public function test_la_normalisation_accepte_les_numeros_et_les_cles_sans_tenir_compte_de_la_casse(): void
+    {
+        foreach (Poste::all() as $poste => $data) {
+            $this->assertSame($poste, Poste::normalize($poste));
+            $this->assertSame($poste, Poste::normalize((string) $poste));
+            $this->assertSame($poste, Poste::normalize(strtoupper($data['key'])));
+        }
+
+        $this->assertNull(Poste::normalize(0));
+        $this->assertNull(Poste::normalize(7));
+        $this->assertNull(Poste::normalize('sup'));
+        $this->assertNull(Poste::normalize(''));
+    }
 }

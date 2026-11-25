@@ -22,7 +22,7 @@ final class QrScanService
     /**
      * @return array<string, mixed>
      */
-    public function dossier(string $token): array
+    public function dossier(string $token, ?int $poste = null): array
     {
         $claims = $this->verifier->verify($token);
         $subject = (string) $claims['sub'];
@@ -60,7 +60,10 @@ final class QrScanService
         /** @var DemandeCamion $camion */
         $camion = $matches->first();
 
-        return MobileDossierPresenter::dossier($camion, $camion->demande);
+        // Le filtrage par poste intervient après la vérification complète des
+        // claims : un QR falsifié reste rejeté même si le document falsifié
+        // n'est pas celui que le client a demandé à afficher.
+        return MobileDossierPresenter::dossier($camion, $camion->demande, $poste);
     }
 
     private function matchesIdentity(DemandeCamion $camion, string $subject): bool
