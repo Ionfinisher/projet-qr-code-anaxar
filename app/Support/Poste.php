@@ -56,6 +56,23 @@ final class Poste
     }
 
     /**
+     * Accepte un numéro de poste ou sa clé (insensible à la casse), tels que
+     * reçus d'un client mobile.
+     */
+    public static function normalize(int|string $value): ?int
+    {
+        if (is_int($value)) {
+            return isset(self::MAP[$value]) ? $value : null;
+        }
+
+        if (ctype_digit($value)) {
+            return self::normalize((int) $value);
+        }
+
+        return self::posteFor(strtolower($value));
+    }
+
+    /**
      * @throws InvalidArgumentException Si le poste n'existe pas.
      */
     public static function labelFor(int $poste): string

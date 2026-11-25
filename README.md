@@ -252,7 +252,7 @@ réponse de login est au format ISO 8601.
 | Méthode | URL | Paramètres (JSON) | Réponse |
 |---------|-----|-------------------|---------|
 | POST | `/api/v1/login` | `email`, `password` | `access_token`, `token_type: "Bearer"`, `expires_at`, `user` (`id`, `name`, `email`, `roles`) |
-| POST | `/api/v1/scan` | `token` (JWS en 3 segments base64url, 4096 car. max) | Dossier complet : `rdv_id`, `demande`, `truck`, 6 `documents`, `checks` |
+| POST | `/api/v1/scan` | `token` (JWS en 3 segments base64url, 4096 car. max), `poste` optionnel (1-6 ou `bc`/`bf`/`as`/`vt`/`gp`/`ta`) | Dossier complet : `rdv_id`, `demande`, `truck`, 6 `documents`, `checks` ; avec `poste`, un seul document et un seul contrôle |
 | POST | `/api/v1/logout` | aucun | `{"message":"Déconnecté."}` |
 
 Le scan est **en lecture seule** : aucun fichier n'est téléchargé, aucun
@@ -260,6 +260,17 @@ contrôle n'est enregistré, aucun événement n'est créé. Les six documents s
 retournés dans l'ordre fixe `bc`, `bf`, `as`, `vt`, `gp`, `ta` avec leur poste,
 leur libellé, leurs métadonnées et leur contrôle éventuel (`null` sinon). La
 réponse n'expose ni URL de téléchargement, ni téléphone ni permis du chauffeur.
+
+Le paramètre optionnel `poste` filtre la réponse sur un seul poste de contrôle :
+`documents` et `checks` ne contiennent alors que le document correspondant
+(les données `rdv_id`, `demande` et `truck` restent complètes). Il accepte le
+numéro du poste ou sa clé, sans tenir compte de la casse. Sans paramètre, la
+réponse conserve les six documents : ce filtrage est donc rétrocompatible.
+Si le document du poste demandé n'existe pas, une entrée avec des métadonnées
+`null` est retournée, comme pour le dossier complet. Les six empreintes `dh`
+du QR sont vérifiées **avant** le filtrage : un QR falsifié reste rejeté même
+si le document falsifié n'est pas celui affiché.
+
 Le champ `rdv_hash` des camions (indexé, calculé avec la position définitive)
 permet de retrouver le dossier ; les claims `op`, `trm`, `slt`, `lot` et `dh`
 sont recalculés côté serveur et doivent correspondre au créneau et aux
@@ -273,7 +284,7 @@ Codes d'erreur :
 | 401 | Identifiants invalides (message identique pour email inconnu et mauvais mot de passe) ou token absent/invalide/révoqué |
 | 403 | Compte non admin, inactif, non approuvé, changement de mot de passe requis, ou token sans capacité `mobile.access` |
 | 404 | Aucun dossier correspondant au QR (`Dossier introuvable.`) |
-| 422 | Validation FormRequest (`token` absent/mal formé) ou identifiant QR ambigu |
+| 422 | Validation FormRequest (`token` absent/mal formé, `poste` inconnu ou de type invalide) ou identifiant QR ambigu |
 | 429 | Limite atteinte : 5 échecs de login par email+IP, 10 requêtes/min sur `login`, 30 scans/min par utilisateur ; en-tête `Retry-After` |
 
 > **Limitation connue et héritée :** le générateur signe actuellement en
