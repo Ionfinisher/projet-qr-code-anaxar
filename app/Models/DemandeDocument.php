@@ -99,6 +99,8 @@ class DemandeDocument extends Model
         }
 
         return self::TYPE_LABELS[$this->type] ?? strtoupper($this->type);
+    }
+
     public function checker(): BelongsTo
     {
         return $this->belongsTo(User::class, 'checked_by');
