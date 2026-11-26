@@ -19,6 +19,7 @@ import { opLabel, statusMeta, terminalLabel } from './status';
 const TABS = [
     { key: 'all', label: 'Toutes' },
     { key: 'en_attente', label: 'En attente' },
+    { key: 'partiellement_validee', label: 'Partiellement validées' },
     { key: 'validee', label: 'Validées' },
     { key: 'rejetee', label: 'Rejetées' },
     { key: 'annulee', label: 'Annulées' },

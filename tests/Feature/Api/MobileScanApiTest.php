@@ -112,6 +112,8 @@ class MobileScanApiTest extends TestCase
             'mime' => 'application/pdf',
             'size' => strlen($content),
             'sha256' => hash('sha256', $content),
+            'statut' => DemandeDocument::STATUT_VALIDE,
+            'validated_at' => now(),
         ]);
     }
 
@@ -462,6 +464,9 @@ class MobileScanApiTest extends TestCase
         $this->authenticate($this->admin());
         $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN10');
         $camion = $this->truck($demande, 1);
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $this->documentFor($camion, $type);
+        }
         $token = $this->qr($demande, $camion);
 
         // Un camion isolé n'embarque pas de claim "lot" : son QR reste valide.
@@ -523,6 +528,9 @@ class MobileScanApiTest extends TestCase
         $this->authenticate($this->admin());
         $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN08');
         $camion = $this->truck($demande, 1);
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $this->documentFor($camion, $type);
+        }
         $token = $this->qr($demande, $camion);
 
         $this->scan($this->resign($token, function (array &$claims): void {
@@ -539,6 +547,9 @@ class MobileScanApiTest extends TestCase
         $accessToken = $this->authenticate($this->admin());
         $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN09');
         $camion = $this->truck($demande, 1);
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $this->documentFor($camion, $type);
+        }
         $token = $this->qr($demande, $camion);
 
         for ($attempt = 0; $attempt < 30; $attempt++) {
@@ -561,6 +572,9 @@ class MobileScanApiTest extends TestCase
 
         $demande = $this->demande($this->transporteur(), $this->slot(), 'DR-SCAN11');
         $camion = $this->truck($demande, 1);
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $this->documentFor($camion, $type);
+        }
         $token = $this->qr($demande, $camion);
 
         for ($attempt = 0; $attempt < 30; $attempt++) {

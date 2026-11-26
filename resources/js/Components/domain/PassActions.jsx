@@ -10,6 +10,10 @@ import { Field, Input } from '@/Components/ui/Field';
 import { Icon } from '@/Components/ui/Icon';
 import { QrCode } from './QrCode';
 import { cn } from '@/Lib/cn';
+import { PassPdf, blobToDataUrl } from '@/Lib/passPdf';
+import {
+    pdf,
+} from '@react-pdf/renderer';
 
 export const siteUrl = () => (typeof window !== 'undefined' ? window.location.origin : '');
 
@@ -19,8 +23,7 @@ export const passLink = (r) =>
 export const waText = (r) =>
     [
         `PortFlow · Gate pass ${r.id}`,
-        `Conteneur : ${r.container?.number || 'à attribuer'} · Tracteur ${r.vehicle?.country} ${r.vehicle?.tractor
-        }`,
+        `Camion : Tracteur ${r.vehicle?.country} ${r.vehicle?.tractor}`,
         r.driver?.license &&
         `Chauffeur : ${driverName(r.driver)} · permis n° ${r.driver.license}`,
         `Votre QR code : ${passLink(r)}`,
@@ -253,6 +256,18 @@ export function PassActions({ rdv: r, compact = false }) {
         }
     };
 
+    const downloadPdf = async () => {
+        setBusy(true);
+        try {
+            const pngBlob = await passPng(r);
+            const image = await blobToDataUrl(pngBlob);
+            const pdfBlob = await pdf(<PassPdf image={image} />).toBlob();
+            await saveFile(`${r.id}-gate-pass.pdf`, pdfBlob);
+        } finally {
+            setBusy(false);
+        }
+    };
+
     return (
         <div className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">
@@ -261,7 +276,7 @@ export function PassActions({ rdv: r, compact = false }) {
                         Envoyer au chauffeur
                     </Button>
                 )}
-                <Button
+                {/* <Button
                     variant="secondary"
                     size={size}
                     icon="download"
@@ -269,6 +284,15 @@ export function PassActions({ rdv: r, compact = false }) {
                     onClick={download}
                 >
                     Télécharger (PNG)
+                </Button> */}
+                <Button
+                    variant="secondary"
+                    size={size}
+                    icon="download"
+                    loading={busy}
+                    onClick={downloadPdf}
+                >
+                    Télécharger (PDF)
                 </Button>
                 <Button
                     variant="secondary"

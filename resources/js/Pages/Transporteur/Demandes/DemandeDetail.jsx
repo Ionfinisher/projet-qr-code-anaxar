@@ -125,14 +125,14 @@ export default function DemandeDetail({ demande, actions = null }) {
                     </p>
                     {demande.status === 'validee' && (
                         <div className="mt-3 flex flex-col gap-2">
-                            {demande.documents_validated ? (
+                            {(demande.rdvs || []).length > 0 ? (
                                 <div className="flex flex-wrap gap-2">
                                     <Button
                                         size="sm"
                                         icon="qr-code"
                                         onClick={() => router.get(route('transporteur.rdv.index', { q: demande.reference }))}
                                     >
-                                        Consulter les rendez-vous & QR ({demande.trucks?.length || 1})
+                                        Consulter les rendez-vous & QR ({demande.rdvs.length})
                                     </Button>
                                 </div>
                             ) : (
@@ -149,6 +149,13 @@ export default function DemandeDetail({ demande, actions = null }) {
                     )}
                 </Alert>
             ) : null}
+
+            {demande.status === 'partiellement_validee' && (
+                <Alert tone="warn" title="Traitement par camion en cours">
+                    <p>Les rendez-vous et QR sont émis individuellement dès qu’un camion est accepté et que ses documents sont validés.</p>
+                    <p className="mt-1">Les camions rejetés peuvent être corrigés et renvoyés sans modifier les autres camions.</p>
+                </Alert>
+            )}
 
             {demande.cancelled_at ? (
                 <Alert tone="neutral" title="Demande annulée">
@@ -265,13 +272,36 @@ export default function DemandeDetail({ demande, actions = null }) {
                                         ) : null}
                                     </p>
                                     <div className="flex flex-wrap items-center gap-1.5">
+                                        <Badge
+                                            tone={truck.review_status === 'validee' ? 'ok' : truck.review_status === 'rejetee' ? 'bad' : 'warn'}
+                                            icon={truck.review_status === 'validee' ? 'circle-check' : truck.review_status === 'rejetee' ? 'circle-x' : 'clock'}
+                                        >
+                                            {truck.review_status === 'validee' ? 'Validé' : truck.review_status === 'rejetee' ? 'Rejeté' : 'En attente'}
+                                        </Badge>
                                         {truckPendingDocs.map((p) => (
                                             <Badge key={p.id} tone={p.status === 'en_attente' ? 'bad' : 'ok'} icon="clock">
                                                 {p.label}
                                             </Badge>
                                         ))}
+                                        {truck.can_resubmit && (
+                                            <Button
+                                                type="button"
+                                                variant="primary"
+                                                size="sm"
+                                                icon="pencil"
+                                                onClick={() => router.get(route('transporteur.demandes.camions.edit', [demande.reference, truck.id]))}
+                                            >
+                                                Corriger et renvoyer
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
+                                {truck.review_status === 'rejetee' && (
+                                    <Alert tone="bad" title="Corrections demandées" className="mb-3">
+                                        <p>{truck.rejection_reason}</p>
+                                        {truck.rejection_comment && <p className="mt-1">{truck.rejection_comment}</p>}
+                                    </Alert>
+                                )}
                                 <div className="grid gap-2 sm:grid-cols-2">
                                     {rdvDocs.map((doc) => {
                                         const file = docs[doc.key];
@@ -286,7 +316,7 @@ export default function DemandeDetail({ demande, actions = null }) {
                                                     <p className="truncate text-xs text-slate-500">
                                                         {file ? `${file.name} · ${fmtSize(file.size)}` : 'Non fourni'}
                                                     </p>
-                                                    {file && demande.status === 'validee' && (
+                                                    {file && truck.review_status === 'validee' && (
                                                         <p className="mt-1">
                                                             {file.statut === 'valide' ? (
                                                                 <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">

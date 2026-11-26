@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Creneau;
+use App\Models\DemandeCamion;
+use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\Inscription;
 use App\Services\CreneauUsageService;
@@ -74,10 +76,17 @@ class DashboardController extends Controller
             ])
             ->values();
 
-        $todayAppointments = DemandeRdv::query()
-            ->where('status', DemandeRdv::STATUS_APPROVED)
-            ->whereHas('creneau', fn ($query) => $query->whereDate('date', $todayString))
-            ->sum('trucks_count');
+        $todayAppointments = DemandeCamion::query()
+            ->where(function ($query) {
+                $query->where('review_status', DemandeCamion::REVIEW_APPROVED)
+                    ->orWhereHas('demande', fn ($demande) => $demande->where('status', DemandeRdv::STATUS_APPROVED));
+            })
+            ->whereHas('demande', fn ($query) => $query
+                ->whereIn('status', [DemandeRdv::STATUS_APPROVED, DemandeRdv::STATUS_PARTIALLY_APPROVED])
+                ->whereHas('creneau', fn ($slot) => $slot->whereDate('date', $todayString)))
+            ->whereHas('documents')
+            ->whereDoesntHave('documents', fn ($query) => $query->where('statut', '!=', DemandeDocument::STATUT_VALIDE))
+            ->count();
 
         $slotData = $slots->map(function (Creneau $slot) use ($slotUsage) {
             $usage = $slotUsage[$slot->id];

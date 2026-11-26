@@ -6,7 +6,6 @@ use App\Models\Creneau;
 use App\Models\DemandeCamion;
 use App\Models\DemandeRdv;
 use App\Models\User;
-use App\Notifications\DemandeRdvDecided;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -56,54 +55,22 @@ class AdminDemandeRdvTest extends TestCase
         $user = $this->transporteur();
         $demande = DemandeRdv::factory()->forUser($user)->forCreneau($this->slot())->create();
 
+        $camion = DemandeCamion::factory()->forDemande($demande, 1)->create();
         $this->actingAs($user)
-            ->post(route('admin.demandes.approve', $demande))
-            ->assertForbidden();
-
-        $this->actingAs($user)
-            ->post(route('admin.demandes.reject', $demande), ['reason' => 'Test'])
+            ->post(route('admin.demandes.camions.reject', [$demande, $camion]), ['reason' => 'Test'])
             ->assertForbidden();
     }
 
-    public function test_admin_can_approve_a_pending_demande(): void
+    public function test_admin_can_reject_a_single_truck(): void
     {
         $admin = $this->admin();
         $user = $this->transporteur();
         $slot = $this->slot();
         $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
-        DemandeCamion::factory()->forDemande($demande, 1)->create();
+        $camion = DemandeCamion::factory()->forDemande($demande, 1)->create();
 
         $response = $this->actingAs($admin)->post(
-            route('admin.demandes.approve', $demande),
-            ['comment' => 'Dossier conforme']
-        );
-
-        $response->assertRedirect();
-        $response->assertSessionHas('success');
-
-        $this->assertDatabaseHas('demandes_rdv', [
-            'id' => $demande->id,
-            'status' => DemandeRdv::STATUS_APPROVED,
-            'decided_by' => $admin->id,
-            'decision_comment' => 'Dossier conforme',
-        ]);
-        $this->assertDatabaseHas('demande_evenements', [
-            'demande_rdv_id' => $demande->id,
-            'type' => 'validee',
-        ]);
-        Notification::assertSentTo($user, DemandeRdvDecided::class);
-    }
-
-    public function test_admin_can_reject_a_pending_demande(): void
-    {
-        $admin = $this->admin();
-        $user = $this->transporteur();
-        $slot = $this->slot();
-        $demande = DemandeRdv::factory()->forUser($user)->forCreneau($slot)->create();
-        DemandeCamion::factory()->forDemande($demande, 1)->create();
-
-        $response = $this->actingAs($admin)->post(
-            route('admin.demandes.reject', $demande),
+            route('admin.demandes.camions.reject', [$demande, $camion]),
             ['reason' => 'Conteneur non libéré', 'comment' => 'Revenez après libération']
         );
 
@@ -114,34 +81,19 @@ class AdminDemandeRdvTest extends TestCase
             'id' => $demande->id,
             'status' => DemandeRdv::STATUS_REJECTED,
             'decided_by' => $admin->id,
+        ]);
+        $this->assertDatabaseHas('demande_camions', [
+            'id' => $camion->id,
+            'review_status' => DemandeCamion::REVIEW_REJECTED,
             'rejection_reason' => 'Conteneur non libéré',
-            'decision_comment' => 'Revenez après libération',
+            'rejection_comment' => 'Revenez après libération',
+            'decided_by' => $admin->id,
         ]);
         $this->assertDatabaseHas('demande_evenements', [
             'demande_rdv_id' => $demande->id,
-            'type' => 'rejetee',
+            'type' => 'camion_rejete',
         ]);
-        Notification::assertSentTo($user, DemandeRdvDecided::class);
-    }
-
-    public function test_admin_cannot_approve_when_the_slot_is_over_capacity(): void
-    {
-        $admin = $this->admin();
-        $slot = $this->slot(['capacity' => 1]);
-
-        $first = DemandeRdv::factory()->forUser($this->transporteur())->forCreneau($slot)->create();
-        DemandeCamion::factory()->forDemande($first, 1)->create();
-
-        $second = DemandeRdv::factory()->forUser($this->transporteur())->forCreneau($slot)->create();
-        DemandeCamion::factory()->forDemande($second, 1)->create();
-
-        $response = $this->actingAs($admin)->post(route('admin.demandes.approve', $second));
-
-        $response->assertSessionHasErrors('demande');
-        $this->assertDatabaseHas('demandes_rdv', [
-            'id' => $second->id,
-            'status' => DemandeRdv::STATUS_PENDING,
-        ]);
+        Notification::assertNothingSent();
     }
 
     public function test_admin_cannot_delete_a_slot_used_by_a_demande(): void

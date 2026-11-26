@@ -21,11 +21,18 @@ class DemandeRdv extends Model
 
     public const STATUS_APPROVED = 'validee';
 
+    public const STATUS_PARTIALLY_APPROVED = 'partiellement_validee';
+
     public const STATUS_REJECTED = 'rejetee';
 
     public const STATUS_CANCELLED = 'annulee';
 
-    public const ACTIVE_STATUSES = [self::STATUS_PENDING, self::STATUS_APPROVED];
+    public const ACTIVE_STATUSES = [
+        self::STATUS_PENDING,
+        self::STATUS_APPROVED,
+        self::STATUS_PARTIALLY_APPROVED,
+        self::STATUS_REJECTED,
+    ];
 
     public const OPERATIONS = ['IMP', 'EXP', 'MTR', 'MTP'];
 
@@ -139,7 +146,6 @@ class DemandeRdv extends Model
 
     public function hasAllDocumentsValidated(): bool
     {
-        // Must be approved first
         if (! $this->isApproved()) {
             return false;
         }
@@ -155,7 +161,7 @@ class DemandeRdv extends Model
 
     public function isActive(): bool
     {
-        return in_array($this->status, self::ACTIVE_STATUSES, true);
+        return $this->status !== self::STATUS_CANCELLED;
     }
 
     public function slotStart(): ?Carbon

@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Models\DemandeRdv;
+use App\Models\DemandeCamion;
 use App\Models\User;
 use App\Support\SlotTime;
 
@@ -20,22 +21,24 @@ class DemandeRdvPolicy
 
     public function update(User $user, DemandeRdv $demande): bool
     {
-        return $this->ownsPendingEditable($user, $demande);
+        return $this->ownsPendingEditable($user, $demande)
+            && ! $demande->camions()->where('review_status', DemandeCamion::REVIEW_REJECTED)->exists();
     }
 
     public function cancel(User $user, DemandeRdv $demande): bool
     {
-        return $this->ownsPendingEditable($user, $demande);
+        return $demande->user_id === $user->id
+            && in_array($demande->status, [DemandeRdv::STATUS_PENDING, DemandeRdv::STATUS_REJECTED], true)
+            && $demande->creneau !== null
+            && ! SlotTime::isPast($demande->creneau);
     }
 
-    public function approve(User $user, DemandeRdv $demande): bool
+    public function updateTruck(User $user, DemandeRdv $demande, DemandeCamion $camion): bool
     {
-        return $user->isAdmin() && $demande->isPending();
-    }
-
-    public function reject(User $user, DemandeRdv $demande): bool
-    {
-        return $user->isAdmin() && $demande->isPending();
+        return $demande->user_id === $user->id
+            && $camion->demande_rdv_id === $demande->id
+            && $camion->isRejected()
+            && $demande->isActive();
     }
 
     private function ownsPendingEditable(User $user, DemandeRdv $demande): bool

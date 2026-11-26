@@ -44,8 +44,8 @@ class CreneauUsageService
             ->whereIn('demandes_rdv.creneau_id', $ids)
             ->whereIn('demandes_rdv.status', DemandeRdv::ACTIVE_STATUSES)
             ->when($exceptDemandeId, fn ($query) => $query->where('demandes_rdv.id', '!=', $exceptDemandeId))
-            ->selectRaw('demandes_rdv.creneau_id as creneau_id, demandes_rdv.status as status, COUNT(*) as total')
-            ->groupBy('demandes_rdv.creneau_id', 'demandes_rdv.status')
+            ->selectRaw('demandes_rdv.creneau_id as creneau_id, demande_camions.review_status as review_status, COUNT(*) as total')
+            ->groupBy('demandes_rdv.creneau_id', 'demande_camions.review_status')
             ->get();
 
         foreach ($rows as $row) {
@@ -55,10 +55,10 @@ class CreneauUsageService
                 continue;
             }
 
-            if ($row->status === DemandeRdv::STATUS_PENDING) {
-                $result[$id]['pending'] += (int) $row->total;
-            } elseif ($row->status === DemandeRdv::STATUS_APPROVED) {
+            if ($row->review_status === DemandeCamion::REVIEW_APPROVED) {
                 $result[$id]['approved'] += (int) $row->total;
+            } else {
+                $result[$id]['pending'] += (int) $row->total;
             }
         }
 

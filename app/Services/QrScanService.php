@@ -71,7 +71,9 @@ final class QrScanService
         $demande = $camion->demande;
 
         return $demande instanceof DemandeRdv
-            && $demande->isApproved()
+            && $demande->isActive()
+            && $camion->isApproved()
+            && $camion->hasAllDocumentsValidated()
             && RdvId::for($camion, $demande) === $subject;
     }
 

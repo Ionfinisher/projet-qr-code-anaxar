@@ -15,14 +15,17 @@ import {
     toE164,
 } from '@/Lib/domain';
 import { docSlot } from './helpers';
+import { useState } from 'react';
 
 const dash = (value) => (value === null || value === undefined || String(value).trim() === '' ? '—' : value);
 
 /** Bloc de récapitulatif : titre, action « Modifier » (retour à l'étape) et contenu. */
 function ReviewSection({ title, icon, step, onEdit, aside, children }) {
+    const [collapsed, setCollapsed] = useState(false);
+
     return (
         <section className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className={cn('flex flex-wrap items-center justify-between gap-3', !collapsed && 'mb-4')}>
                 <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-slate-500">
                     {icon ? <Icon name={icon} size={16} className="text-slate-400" /> : null}
                     {title}
@@ -34,14 +37,25 @@ function ReviewSection({ title, icon, step, onEdit, aside, children }) {
                             Modifier
                         </Button>
                     ) : null}
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        icon={collapsed ? 'chevron-down' : 'chevron-up'}
+                        aria-expanded={!collapsed}
+                        onClick={() => setCollapsed((value) => !value)}
+                    >
+                        {collapsed ? 'Déplier' : 'Replier'}
+                    </Button>
                 </div>
             </div>
-            {children}
+            {!collapsed && children}
         </section>
     );
 }
 
 function TruckReview({ truck, index }) {
+    const [collapsedTruck, setCollapsedTruck] = useState(false);
     const { driver, vehicle, container } = truck;
     const phone = driver.phone_national.trim()
         ? formatPhone(toE164(driver.phone_cc, driver.phone_national))
@@ -53,44 +67,56 @@ function TruckReview({ truck, index }) {
         : `${fmtInt(Number(container.vgm))} kg`;
 
     return (
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-            <div className="mb-3 flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
-                <p className="text-sm font-semibold text-slate-900">
-                    {dash(`${driver.last.trim().toUpperCase()} ${driver.first.trim()}`.trim())}
-                </p>
+        <div className={cn('rounded-xl border border-slate-200 bg-white p-4', !collapsedTruck && 'mb-3')}>
+            <div className="flex justify-between">
+                <div className="mb-3 flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
+                    <p className="text-sm font-semibold text-slate-900">
+                        {dash(`${driver.last.trim().toUpperCase()} ${driver.first.trim()}`.trim())}
+                    </p>
+                </div>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    icon={collapsedTruck ? 'chevron-down' : 'chevron-up'}
+                    aria-expanded={!collapsedTruck}
+                    onClick={() => setCollapsedTruck((value) => !value)}
+                >
+                    {collapsedTruck ? 'Déplier' : 'Replier'}
+                </Button>
             </div>
+            {!collapsedTruck &&
+                (<div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Chauffeur</p>
+                        <KeyValue dense items={[
+                            ['Nom et prénom', dash(`${driver.last.trim().toUpperCase()} ${driver.first.trim()}`.trim())],
+                            ['Téléphone', dash(phone)],
+                            ['N° de permis', dash(driver.license.trim().toUpperCase())],
+                        ]} />
+                    </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Chauffeur</p>
-                    <KeyValue dense items={[
-                        ['Nom et prénom', dash(`${driver.last.trim().toUpperCase()} ${driver.first.trim()}`.trim())],
-                        ['Téléphone', dash(phone)],
-                        ['N° de permis', dash(driver.license.trim().toUpperCase())],
-                    ]} />
-                </div>
+                    <div>
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Véhicule</p>
+                        <KeyValue dense items={[
+                            ['Pays', dash(country ? `${country.name} (${country.code})` : '')],
+                            ['Tracteur', dash(vehicle.tractor.trim())],
+                            ['Remorque', dash(vehicle.trailer.trim())],
+                        ]} />
+                    </div>
 
-                <div>
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Véhicule</p>
-                    <KeyValue dense items={[
-                        ['Pays', dash(country ? `${country.name} (${country.code})` : '')],
-                        ['Tracteur', dash(vehicle.tractor.trim())],
-                        ['Remorque', dash(vehicle.trailer.trim())],
-                    ]} />
-                </div>
-
-                <div className="sm:col-span-2">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Conteneur</p>
-                    <KeyValue dense items={[
-                        ['N° de conteneur', dash(parseContainer(container.number).raw)],
-                        ['Type ISO', dash(iso ? `${iso.code} · ${iso.label}` : container.iso)],
-                        ['Connaissement (B/L)', dash(parseBL(container.bl).raw)],
-                        ['Marchandise', dash(container.goods.trim())],
-                        ['VGM', dash(vgm)],
-                    ]} />
-                </div>
-            </div>
+                    <div className="sm:col-span-2">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Conteneur</p>
+                        <KeyValue dense items={[
+                            ['N° de conteneur', dash(parseContainer(container.number).raw)],
+                            ['Type ISO', dash(iso ? `${iso.code} · ${iso.label}` : container.iso)],
+                            ['Connaissement (B/L)', dash(parseBL(container.bl).raw)],
+                            ['Marchandise', dash(container.goods.trim())],
+                            ['VGM', dash(vgm)],
+                        ]} />
+                    </div>
+                </div>)}
         </div>
     );
 }

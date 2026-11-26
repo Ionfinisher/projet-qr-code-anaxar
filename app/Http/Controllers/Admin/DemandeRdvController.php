@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Transporteur\RejectDemandeRdvRequest;
+use App\Http\Requests\Admin\RejectDemandeCamionRequest;
+use App\Models\DemandeCamion;
 use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Services\CreneauUsageService;
@@ -35,6 +36,7 @@ class DemandeRdvController extends Controller
         $counts = [
             'all' => DemandeRdv::query()->count(),
             'en_attente' => DemandeRdv::query()->where('status', DemandeRdv::STATUS_PENDING)->count(),
+            'partiellement_validee' => DemandeRdv::query()->where('status', DemandeRdv::STATUS_PARTIALLY_APPROVED)->count(),
             'validee' => DemandeRdv::query()->where('status', DemandeRdv::STATUS_APPROVED)->count(),
             'rejetee' => DemandeRdv::query()->where('status', DemandeRdv::STATUS_REJECTED)->count(),
             'annulee' => DemandeRdv::query()->where('status', DemandeRdv::STATUS_CANCELLED)->count(),
@@ -52,6 +54,7 @@ class DemandeRdvController extends Controller
 
         if ($status !== 'all' && in_array($status, [
             DemandeRdv::STATUS_PENDING,
+            DemandeRdv::STATUS_PARTIALLY_APPROVED,
             DemandeRdv::STATUS_APPROVED,
             DemandeRdv::STATUS_REJECTED,
             DemandeRdv::STATUS_CANCELLED,
@@ -172,27 +175,21 @@ class DemandeRdvController extends Controller
         return redirect()->route('admin.demandes.index', ['id' => $demande->reference]);
     }
 
-    public function approve(Request $request, DemandeRdv $demande): RedirectResponse
-    {
-        $validated = $request->validate([
-            'comment' => ['nullable', 'string', 'max:1000'],
-        ]);
-
-        $this->service->approve($demande, $request->user(), $validated['comment'] ?? null);
-
-        return back()->with('success', 'Demande validée.');
-    }
-
-    public function reject(RejectDemandeRdvRequest $request, DemandeRdv $demande): RedirectResponse
-    {
-        $this->service->reject(
+    public function rejectTruck(
+        RejectDemandeCamionRequest $request,
+        DemandeRdv $demande,
+        DemandeCamion $camion
+    ): RedirectResponse {
+        abort_unless($camion->demande_rdv_id === $demande->id, 404);
+        $this->service->rejectTruck(
             $demande,
+            $camion,
             $request->user(),
             $request->validated('reason'),
             $request->validated('comment')
         );
 
-        return back()->with('success', 'Demande rejetée.');
+        return back()->with('success', "Camion {$camion->position} rejeté.");
     }
 
     public function validateDocument(DemandeRdv $demande, DemandeDocument $document, Request $request): RedirectResponse
@@ -207,6 +204,11 @@ class DemandeRdvController extends Controller
         $this->service->validateDocument($document, $request->user());
 
         $demande->refresh();
+        $document->loadMissing('camion.documents');
+        if ($document->camion?->isApproved() && $document->camion->hasAllDocumentsValidated()) {
+            return back()->with('success', "Documents du camion {$document->camion->position} validés : son rendez-vous et son QR code sont disponibles.");
+        }
+
         if ($demande->isApproved()) {
             return back()->with('success', 'Tous les documents sont validés : la demande a été validée et les QR codes ont été générés.');
         }

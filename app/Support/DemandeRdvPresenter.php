@@ -47,6 +47,7 @@ final class DemandeRdvPresenter
             'evenements.actor',
             'decideur',
             'user',
+            'camions.decideur',
         ]);
 
         $documentsByTruck = self::documentsByTruck($demande, $viewer);
@@ -109,9 +110,11 @@ final class DemandeRdvPresenter
                 ->map(fn (DemandeCamion $camion) => self::truck($camion, $demande))
                 ->values()
                 ->all(),
-            'rdvs' => $demande->isApproved()
-                ? $demande->camions->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))->values()->all()
-                : [],
+            'rdvs' => $demande->camions
+                ->filter(fn (DemandeCamion $camion) => $camion->isApproved() && $camion->hasAllDocumentsValidated())
+                ->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))
+                ->values()
+                ->all(),
             'documents' => $documents,
             'docs' => $documentsByTruck,
             'history' => $demande->evenements
@@ -145,7 +148,7 @@ final class DemandeRdvPresenter
      *
      * @return array<string, mixed>
      */
-    public static function form(DemandeRdv $demande): array
+    public static function form(DemandeRdv $demande, ?User $viewer = null): array
     {
         $demande->loadMissing(['creneau', 'camions.documents', 'documents']);
 
@@ -166,13 +169,15 @@ final class DemandeRdvPresenter
                 'phone' => $demande->mandated_phone ?? '',
             ],
             'trucks' => $demande->camions
-                ->map(fn (DemandeCamion $camion) => self::truck($camion, $demande))
+                ->map(fn (DemandeCamion $camion) => self::truck($camion, $demande, $viewer))
                 ->values()
                 ->all(),
-            'rdvs' => $demande->isApproved()
-                ? $demande->camions->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))->values()->all()
-                : [],
-            'docs' => self::documentsByTruck($demande),
+            'rdvs' => $demande->camions
+                ->filter(fn (DemandeCamion $camion) => $camion->isApproved() && $camion->hasAllDocumentsValidated())
+                ->map(fn (DemandeCamion $camion) => self::rdv($camion, $demande))
+                ->values()
+                ->all(),
+            'docs' => self::documentsByTruck($demande, $viewer),
         ];
     }
 
@@ -229,20 +234,35 @@ final class DemandeRdvPresenter
     /**
      * @return array<string, mixed>
      */
-    public static function truck(DemandeCamion $camion, ?DemandeRdv $demande = null): array
+    public static function truck(
+        DemandeCamion $camion,
+        ?DemandeRdv $demande = null,
+        ?User $viewer = null
+    ): array
     {
         $demande = $demande ?? ($camion->relationLoaded('demande') ? $camion->demande : null);
-        $rdvId = $demande ? 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6)) : null;
-        $canEmitToken = $demande && $demande->isApproved() && $demande->hasAllDocumentsValidated();
-        $token = $canEmitToken ? self::generateToken($demande, $camion) : null;
         $rdvId = $demande ? RdvId::for($camion, $demande) : null;
-        $token = ($demande && $demande->isApproved()) ? self::generateToken($demande, $camion) : null;
+        $documentsValidated = $camion->hasAllDocumentsValidated();
+        $approved = $camion->isApproved();
+        $token = $demande && $approved && $documentsValidated
+            ? self::generateToken($demande, $camion)
+            : null;
 
         return [
             'id' => $camion->id,
             'rdv_id' => $rdvId,
             'token' => $token,
-            'documents_validated' => $demande ? $demande->hasAllDocumentsValidated() : false,
+            'documents_validated' => $documentsValidated,
+            'review_status' => $approved ? DemandeCamion::REVIEW_APPROVED : $camion->review_status,
+            'rejection_reason' => $camion->rejection_reason,
+            'rejection_comment' => $camion->rejection_comment,
+            'decision' => $camion->decided_at ? [
+                'at' => $camion->decided_at->toIso8601String(),
+                'by' => $camion->relationLoaded('decideur') ? $camion->decideur?->name : null,
+                'reason' => $camion->rejection_reason,
+                'comment' => $camion->rejection_comment,
+            ] : null,
+            'can_resubmit' => $viewer ? $viewer->can('updateTruck', [$demande, $camion]) : false,
             'position' => $camion->position,
             'driver' => [
                 'first' => $camion->driver_first,
@@ -274,7 +294,7 @@ final class DemandeRdvPresenter
         $demande->loadMissing(['creneau', 'user', 'camions.documents', 'documents.validator']);
 
         $rdvId = 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6));
-        $canEmitToken = $demande->isApproved() && $demande->hasAllDocumentsValidated();
+        $canEmitToken = $camion->isApproved() && $camion->hasAllDocumentsValidated();
         $token = $canEmitToken ? self::generateToken($demande, $camion) : null;
 
         $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : $camion->documents()->get();
@@ -297,9 +317,9 @@ final class DemandeRdvPresenter
             'lotIndex' => $camion->position,
             'lotSize' => $demande->trucks_count,
             'status' => 'confirme',
-            'validation' => $demande->status === 'validee' ? 'approved' : ($demande->status === 'rejetee' ? 'rejected' : 'pending'),
+            'validation' => $camion->isApproved() ? 'approved' : ($camion->isRejected() ? 'rejected' : 'pending'),
             'createdAt' => $demande->submitted_at?->toIso8601String() ?? now()->toIso8601String(),
-            'issuedAt' => $demande->decided_at?->toIso8601String() ?? $demande->updated_at?->toIso8601String(),
+            'issuedAt' => $camion->decided_at?->toIso8601String() ?? $demande->submitted_at?->toIso8601String(),
             'op' => $demande->operation,
             'terminal' => $demande->terminal,
             'slot' => self::slot($demande),
@@ -349,7 +369,10 @@ final class DemandeRdvPresenter
 
         $startTs = strtotime("{$slotDate} {$slotStart}:00") ?: time();
         $endTs = strtotime("{$slotDate} {$slotEnd}:00") ?: ($startTs + 7200);
-        $issuedTs = $demande->decided_at ? $demande->decided_at->timestamp : ($demande->submitted_at ? $demande->submitted_at->timestamp : time());
+        $issuedTs = $camion->decided_at?->timestamp
+            ?? $demande->decided_at?->timestamp
+            ?? $demande->submitted_at?->timestamp
+            ?? time();
 
         $header = [
             'alg' => 'ES256',

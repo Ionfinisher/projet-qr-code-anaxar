@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Creneau;
+use App\Models\DemandeCamion;
 use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\PieceAFournir;
@@ -109,156 +110,301 @@ class DemandeRdvService
         }, 3);
     }
 
-    public function approve(DemandeRdv $demande, User $admin, ?string $comment = null): DemandeRdv
-    {
-        $demande = DB::transaction(function () use ($demande, $admin, $comment) {
-            $locked = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
-
-            if (! $locked->isPending()) {
-                throw ValidationException::withMessages([
-                    'demande' => 'Cette demande a déjà été traitée.',
-                ]);
-            }
-
-            $creneau = Creneau::query()->whereKey($locked->creneau_id)->lockForUpdate()->firstOrFail();
-
-            if (! $creneau->open || SlotTime::isPast($creneau)) {
-                throw ValidationException::withMessages([
-                    'demande' => 'Ce créneau est fermé ou déjà passé.',
-                ]);
-            }
-
-            $usage = $this->usage->forCreneau($creneau, $locked->id);
-            $trucks = $locked->camions()->count();
-
-            if ($usage['remaining'] < $trucks) {
-                throw ValidationException::withMessages([
-                    'demande' => 'La capacité restante du créneau ne permet plus de valider cette demande.',
-                ]);
-            }
-
-            $locked->update([
-                'status' => DemandeRdv::STATUS_APPROVED,
-                'decided_at' => now(),
-                'decided_by' => $admin->id,
-                'decision_comment' => $this->nullableString($comment),
-                'rejection_reason' => null,
-            ]);
-
-            $this->record($locked, 'validee', $admin, $this->nullableString($comment));
-
-            return $locked;
-        }, 3);
-
-        $demande->load(['user', 'creneau']);
-        $demande->user?->notify(new DemandeRdvDecided($demande, true));
-
-        return $demande;
-    }
-
     public function validateDocument(DemandeDocument $document, User $admin): DemandeDocument
     {
         $demande = $document->demande;
-        if (! $demande || (! $demande->isPending() && ! $demande->isApproved())) {
+        if (! $demande || ! $demande->isActive()
+            || ($demande->status === DemandeRdv::STATUS_REJECTED && $document->demande_camion_id === null)) {
             throw ValidationException::withMessages([
-                'document' => 'La validation d’un document nécessite que la demande soit en attente ou déjà validée.',
+                'document' => 'La demande est annulée et ses documents ne peuvent plus être validés.',
             ]);
         }
 
-        DB::transaction(function () use ($document, $demande, $admin) {
-            $document->update([
+        $becameApproved = DB::transaction(function () use ($document, $demande, $admin) {
+            $lockedDemande = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+            $wasApproved = $lockedDemande->isApproved();
+            $lockedDocument = DemandeDocument::query()->whereKey($document->id)->lockForUpdate()->firstOrFail();
+            $camion = $lockedDocument->demande_camion_id
+                ? DemandeCamion::query()->whereKey($lockedDocument->demande_camion_id)->lockForUpdate()->first()
+                : null;
+
+            if ($camion && $camion->isRejected()) {
+                throw ValidationException::withMessages([
+                    'document' => 'Ce camion a été rejeté et doit être corrigé puis renvoyé avant validation.',
+                ]);
+            }
+
+            $lockedDocument->update([
                 'statut' => DemandeDocument::STATUT_VALIDE,
                 'validated_at' => now(),
                 'validated_by' => $admin->id,
             ]);
 
-            $docLabel = $document->typeLabel();
-            $detail = $document->camion
-                ? "{$docLabel} (Camion {$document->camion->position}) validé"
+            $docLabel = $lockedDocument->typeLabel();
+            $detail = $camion
+                ? "{$docLabel} (Camion {$camion->position}) validé"
                 : "{$docLabel} validé";
+            $this->record($lockedDemande, 'document_valide', $admin, $detail);
 
-            $this->record(
-                $demande,
-                'document_valide',
-                $admin,
-                $detail
-            );
-
-            // Vérifier si tous les documents de la demande sont validés
-            $allDocuments = $demande->documents()->get();
-            $hasUnvalidated = $allDocuments->contains(fn (DemandeDocument $doc) => ! $doc->isValidated());
-
-            if (! $hasUnvalidated && $demande->isPending()) {
-                // Déclencher l'approbation automatique de la demande
-                $lockedDemande = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+            if ($camion && $camion->documents()->exists()
+                && $camion->documents()->where('statut', '!=', DemandeDocument::STATUT_VALIDE)->doesntExist()) {
                 $creneau = Creneau::query()->whereKey($lockedDemande->creneau_id)->lockForUpdate()->firstOrFail();
-
                 if (! $creneau->open || SlotTime::isPast($creneau)) {
                     throw ValidationException::withMessages([
-                        'document' => 'Le créneau de cette demande est fermé ou déjà passé.',
+                        'document' => 'Le créneau de ce camion est fermé ou déjà passé.',
                     ]);
                 }
 
-                $usage = $this->usage->forCreneau($creneau, $lockedDemande->id);
-                $trucks = $lockedDemande->camions()->count();
-
-                if ($usage['remaining'] < $trucks) {
-                    throw ValidationException::withMessages([
-                        'document' => 'La capacité restante du créneau ne permet plus de valider cette demande.',
-                    ]);
-                }
-
+                $camion->update([
+                    'review_status' => DemandeCamion::REVIEW_APPROVED,
+                    'decided_at' => now(),
+                    'decided_by' => $admin->id,
+                    'rejection_reason' => null,
+                    'rejection_comment' => null,
+                ]);
+            } elseif (! $camion && $lockedDemande->camions()->doesntExist()
+                && $lockedDemande->documents()->where('statut', '!=', DemandeDocument::STATUT_VALIDE)->doesntExist()) {
                 $lockedDemande->update([
                     'status' => DemandeRdv::STATUS_APPROVED,
                     'decided_at' => now(),
                     'decided_by' => $admin->id,
-                    'decision_comment' => 'Validation automatique suite à la conformité de l’ensemble des documents.',
+                    'decision_comment' => 'Validation automatique suite à la conformité des documents.',
                     'rejection_reason' => null,
                 ]);
-
-                $this->record(
-                    $lockedDemande,
-                    'validee',
-                    $admin,
-                    'Validation complète automatique suite à la conformité de l’ensemble des pièces justificatives.'
-                );
-
-                $lockedDemande->load(['user', 'creneau']);
-                $lockedDemande->user?->notify(new DemandeRdvDecided($lockedDemande, true));
             }
+
+            $this->refreshAggregateStatus($lockedDemande, $admin);
+
+            return ! $wasApproved && $lockedDemande->isApproved();
         }, 3);
+
+        if ($becameApproved) {
+            $freshDemande = $demande->fresh()->load(['user', 'creneau']);
+            $freshDemande->user?->notify(new DemandeRdvDecided($freshDemande, true));
+        }
 
         return $document->fresh();
     }
 
-    public function reject(DemandeRdv $demande, User $admin, string $reason, ?string $comment = null): DemandeRdv
-    {
-        $demande = DB::transaction(function () use ($demande, $admin, $reason, $comment) {
-            $locked = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+    public function rejectTruck(
+        DemandeRdv $demande,
+        DemandeCamion $camion,
+        User $admin,
+        string $reason,
+        ?string $comment = null
+    ): DemandeCamion {
+        return DB::transaction(function () use ($demande, $camion, $admin, $reason, $comment) {
+            $lockedDemande = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+            $lockedTruck = DemandeCamion::query()->whereKey($camion->id)->lockForUpdate()->firstOrFail();
 
-            if (! $locked->isPending()) {
+            if ($lockedTruck->demande_rdv_id !== $lockedDemande->id
+                || $lockedTruck->review_status !== DemandeCamion::REVIEW_PENDING
+                || ! $lockedDemande->isActive()) {
                 throw ValidationException::withMessages([
-                    'demande' => 'Cette demande a déjà été traitée.',
+                    'truck' => 'Ce camion ne peut plus être rejeté.',
                 ]);
             }
 
-            $locked->update([
-                'status' => DemandeRdv::STATUS_REJECTED,
+            $lockedTruck->update([
+                'review_status' => DemandeCamion::REVIEW_REJECTED,
                 'decided_at' => now(),
                 'decided_by' => $admin->id,
                 'rejection_reason' => $reason,
-                'decision_comment' => $this->nullableString($comment),
+                'rejection_comment' => $this->nullableString($comment),
             ]);
 
-            $this->record($locked, 'rejetee', $admin, $reason);
+            $this->record(
+                $lockedDemande,
+                'camion_rejete',
+                $admin,
+                "Camion {$lockedTruck->position} rejeté : {$reason}"
+            );
+            $this->refreshAggregateStatus($lockedDemande, $admin);
 
-            return $locked;
+            return $lockedTruck->fresh();
+        }, 3);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public function resubmitTruck(
+        DemandeRdv $demande,
+        DemandeCamion $camion,
+        array $data,
+        User $user
+    ): DemandeCamion {
+        $pathsToDelete = [];
+
+        $updatedTruck = DB::transaction(function () use ($demande, $camion, $data, $user, &$pathsToDelete) {
+            $lockedDemande = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+            $lockedTruck = DemandeCamion::query()->whereKey($camion->id)->lockForUpdate()->firstOrFail();
+            $truckData = reset($data['trucks']);
+
+            if ($lockedTruck->demande_rdv_id !== $lockedDemande->id
+                || ! $lockedTruck->isRejected()
+                || ! $lockedDemande->isActive()
+                || (int) ($truckData['rdvId'] ?? 0) !== $lockedTruck->id) {
+                throw ValidationException::withMessages([
+                    'truck' => 'Ce camion ne peut pas être modifié ou renvoyé.',
+                ]);
+            }
+
+            $lockedTruck->update($this->camionAttributes($truckData, $lockedTruck->position, $lockedDemande->operation));
+            $lockedTruck->forceFill([
+                'rdv_hash' => substr(RdvId::for($lockedTruck, $lockedDemande), strlen(RdvId::PREFIX)),
+            ])->save();
+            $this->syncRejectedTruckDocuments(
+                $lockedDemande,
+                $lockedTruck,
+                (string) $truckData['key'],
+                $data['docs'][(string) $truckData['key']] ?? [],
+                $user,
+                $pathsToDelete
+            );
+
+            $lockedTruck->update([
+                'review_status' => DemandeCamion::REVIEW_PENDING,
+                'decided_at' => null,
+                'decided_by' => null,
+                'rejection_reason' => null,
+                'rejection_comment' => null,
+            ]);
+
+            $this->record($lockedDemande, 'camion_renvoye', $user, "Camion {$lockedTruck->position} renvoyé après correction.");
+            $this->refreshAggregateStatus($lockedDemande, $user);
+            DB::afterCommit(fn () => $this->deleteFiles($pathsToDelete));
+
+            return $lockedTruck->fresh();
         }, 3);
 
-        $demande->load(['user', 'creneau']);
-        $demande->user?->notify(new DemandeRdvDecided($demande, false));
+        return $updatedTruck;
+    }
 
-        return $demande;
+    private function refreshAggregateStatus(DemandeRdv $demande, User $actor): void
+    {
+        $trucks = $demande->camions()->get();
+        if ($trucks->isEmpty()) {
+            return;
+        }
+
+        $approved = $trucks->where('review_status', DemandeCamion::REVIEW_APPROVED)->count();
+        $pending = $trucks->where('review_status', DemandeCamion::REVIEW_PENDING)->count();
+        $status = match (true) {
+            $approved === $trucks->count() => DemandeRdv::STATUS_APPROVED,
+            $approved > 0 => DemandeRdv::STATUS_PARTIALLY_APPROVED,
+            $pending > 0 => DemandeRdv::STATUS_PENDING,
+            default => DemandeRdv::STATUS_REJECTED,
+        };
+
+        $attributes = ['status' => $status];
+        if (in_array($status, [DemandeRdv::STATUS_PENDING, DemandeRdv::STATUS_PARTIALLY_APPROVED], true)) {
+            $attributes += [
+                'decided_at' => null,
+                'decided_by' => null,
+                'decision_comment' => null,
+                'rejection_reason' => null,
+            ];
+        } elseif ($demande->status !== $status || $demande->decided_at === null) {
+            $attributes += [
+                'decided_at' => now(),
+                'decided_by' => $actor->id,
+                'decision_comment' => null,
+                'rejection_reason' => null,
+            ];
+        }
+
+        $demande->update($attributes);
+    }
+
+    /**
+     * Replace only documents belonging to the truck being corrected.
+     *
+     * @param  array<string, string|int>  $documents
+     * @param  array<int, string>  $pathsToDelete
+     */
+    private function syncRejectedTruckDocuments(
+        DemandeRdv $demande,
+        DemandeCamion $camion,
+        string $truckKey,
+        array $documents,
+        User $user,
+        array &$pathsToDelete
+    ): void {
+        $existing = $camion->documents()->get()->keyBy('type');
+        $pieces = PieceAFournir::query()
+            ->whereIn('code', DemandeRdv::DOC_TYPES)
+            ->get()
+            ->keyBy('code');
+
+        foreach (DemandeRdv::DOC_TYPES as $type) {
+            $value = $documents[$type] ?? null;
+            $raw = is_int($value) ? (string) $value : (is_string($value) ? trim($value) : '');
+            $document = $existing->get($type);
+            $attributes = [
+                'statut' => DemandeDocument::STATUT_EN_ATTENTE,
+                'validated_at' => null,
+                'validated_by' => null,
+            ];
+
+            if (Str::isUuid($raw)) {
+                $upload = TemporaryUpload::query()
+                    ->where('token', $raw)
+                    ->where('user_id', $user->id)
+                    ->where('type', $type)
+                    ->where('truck_key', $truckKey)
+                    ->first();
+
+                if (! $upload) {
+                    throw ValidationException::withMessages([
+                        "docs.{$truckKey}.{$type}" => 'Le fichier téléversé est introuvable ou expiré.',
+                    ]);
+                }
+
+                $extension = strtolower(pathinfo($upload->original_name, PATHINFO_EXTENSION));
+                $directory = "rendez-vous/{$demande->id}/{$camion->id}";
+                $path = $directory.'/'.$type.'-'.Str::uuid().($extension !== '' ? '.'.$extension : '');
+                Storage::disk('local')->makeDirectory($directory);
+
+                if (! Storage::disk('local')->move($upload->path, $path)) {
+                    throw new RuntimeException('Impossible de déplacer le document téléversé.');
+                }
+
+                if ($document) {
+                    $pathsToDelete[] = $document->path;
+                }
+
+                $attributes += [
+                    'piece_a_fournir_id' => $pieces->get($type)?->id,
+                    'original_name' => $upload->original_name,
+                    'path' => $path,
+                    'mime' => $upload->mime,
+                    'size' => $upload->size,
+                    'sha256' => $upload->sha256,
+                ];
+                $upload->delete();
+            } elseif (ctype_digit($raw)) {
+                if (! $document || (int) $raw !== $document->id) {
+                    throw ValidationException::withMessages([
+                        "docs.{$truckKey}.{$type}" => 'Ce document ne correspond pas à ce camion.',
+                    ]);
+                }
+            } else {
+                throw ValidationException::withMessages([
+                    "docs.{$truckKey}.{$type}" => 'Référence de document invalide.',
+                ]);
+            }
+
+            if ($document) {
+                $document->update($attributes);
+            } else {
+                $demande->documents()->create(array_merge($attributes, [
+                    'demande_camion_id' => $camion->id,
+                    'piece_a_fournir_id' => $pieces->get($type)?->id,
+                    'type' => $type,
+                ]));
+            }
+        }
     }
 
     private function resolveSlot(string $date, string $start, ?string $terminalCode = null): Creneau

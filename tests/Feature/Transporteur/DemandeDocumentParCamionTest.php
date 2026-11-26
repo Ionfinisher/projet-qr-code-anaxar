@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class DemandeDocumentParCamionTest extends TestCase
@@ -370,6 +371,10 @@ class DemandeDocumentParCamionTest extends TestCase
 
         $demande = DemandeRdv::firstOrFail();
         $demande->update(['status' => DemandeRdv::STATUS_APPROVED, 'decided_at' => now()]);
+        $demande->documents()->update([
+            'statut' => DemandeDocument::STATUT_VALIDE,
+            'validated_at' => now(),
+        ]);
 
         $response = $this->actingAs($user)->get(route('transporteur.rdv.index'));
         $response->assertOk()->assertInertia(fn ($page) => $page->has('rdvs', 2));
@@ -384,6 +389,73 @@ class DemandeDocumentParCamionTest extends TestCase
         $this->assertSame(array_values($this->expectedHashes($premier)), $claimsPremier['dh']);
         $this->assertSame(array_values($this->expectedHashes($second)), $claimsSecond['dh']);
         $this->assertNotSame($claimsPremier['dh'], $claimsSecond['dh']);
+    }
+
+    public function test_transporteur_can_correct_and_resubmit_only_a_rejected_truck(): void
+    {
+        $user = $this->transporteur();
+        $slot = $this->slot();
+        $docs = $this->uploadDocuments($user, 'truck-1', 'first-')
+            + $this->uploadDocuments($user, 'truck-2', 'second-');
+        $this->actingAs($user)->post(route('transporteur.demandes.store'), $this->payload($slot, [
+            'docs' => $docs,
+            'trucks' => [$this->truck(1), $this->truck(2)],
+        ]))->assertRedirect();
+
+        $demande = DemandeRdv::firstOrFail();
+        $trucks = $demande->camions()->orderBy('position')->get();
+        $firstTruck = $trucks[0];
+        $rejectedTruck = $trucks[1];
+        $originalHash = $rejectedTruck->documents()->where('type', 'bc')->value('sha256');
+        $admin = User::factory()->create(['email_verified_at' => now()]);
+        $admin->assignRole(Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']));
+
+        foreach ($firstTruck->documents as $document) {
+            $this->actingAs($admin)->post(
+                route('admin.demandes.documents.validate', [$demande, $document])
+            )->assertRedirect();
+        }
+
+        $this->assertSame(DemandeRdv::STATUS_PARTIALLY_APPROVED, $demande->fresh()->status);
+        $this->assertSame(DemandeCamion::REVIEW_APPROVED, $firstTruck->fresh()->review_status);
+
+        $this->actingAs($admin)->post(
+            route('admin.demandes.camions.reject', [$demande, $rejectedTruck]),
+            ['reason' => 'Documents illisibles', 'comment' => 'Merci de téléverser des copies nettes.']
+        )->assertRedirect();
+
+        $this->assertSame(DemandeRdv::STATUS_PARTIALLY_APPROVED, $demande->fresh()->status);
+        $this->assertSame(DemandeCamion::REVIEW_REJECTED, $rejectedTruck->fresh()->review_status);
+        $this->assertSame(2, app(\App\Services\CreneauUsageService::class)->forCreneau($slot)['used']);
+
+        $this->actingAs($user)
+            ->get(route('transporteur.demandes.camions.edit', [$demande, $rejectedTruck]))
+            ->assertOk();
+        $this->actingAs($user)
+            ->get(route('transporteur.demandes.camions.edit', [$demande, $firstTruck]))
+            ->assertForbidden();
+
+        $correctedTruck = $this->truck(2);
+        $correctedTruck['key'] = (string) $rejectedTruck->id;
+        $correctedTruck['rdvId'] = $rejectedTruck->id;
+        $correctedDocs = $this->uploadDocuments($user, (string) $rejectedTruck->id, 'corrected-');
+        $this->actingAs($user)->put(
+            route('transporteur.demandes.camions.resubmit', [$demande, $rejectedTruck]),
+            $this->payload($slot, [
+                'trucks' => [$correctedTruck],
+                'docs' => $correctedDocs,
+            ])
+        )->assertRedirect(route('transporteur.demandes.sent', $demande->reference));
+
+        $this->assertSame(DemandeRdv::STATUS_PARTIALLY_APPROVED, $demande->fresh()->status);
+        $this->assertSame(DemandeCamion::REVIEW_PENDING, $rejectedTruck->fresh()->review_status);
+        $this->assertSame(DemandeCamion::REVIEW_APPROVED, $firstTruck->fresh()->review_status);
+        $this->assertSame(12, $demande->documents()->count());
+        $this->assertCount(6, $rejectedTruck->fresh()->documents);
+        $this->assertNotSame($originalHash, $rejectedTruck->fresh()->documents()->where('type', 'bc')->value('sha256'));
+        $this->assertCount(6, $firstTruck->fresh()->documents);
+        $this->assertTrue($firstTruck->fresh()->documents->every(fn ($document) => $document->isValidated()));
+        $this->assertSame(2, app(\App\Services\CreneauUsageService::class)->forCreneau($slot)['used']);
     }
 
     public function test_les_props_exposent_les_documents_indexes_par_camion(): void
