@@ -11,9 +11,18 @@ class DemandeCamion extends Model
 {
     use HasFactory;
 
+    public const REVIEW_PENDING = 'en_attente';
+    public const REVIEW_APPROVED = 'validee';
+    public const REVIEW_REJECTED = 'rejetee';
+
     protected $fillable = [
         'demande_rdv_id',
         'position',
+        'review_status',
+        'decided_at',
+        'decided_by',
+        'rejection_reason',
+        'rejection_comment',
         'driver_first',
         'driver_last',
         'driver_phone',
@@ -32,6 +41,7 @@ class DemandeCamion extends Model
     protected $casts = [
         'position' => 'integer',
         'container_vgm' => 'integer',
+        'decided_at' => 'datetime',
     ];
 
     public function demande(): BelongsTo
@@ -42,5 +52,33 @@ class DemandeCamion extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(DemandeDocument::class, 'demande_camion_id');
+    }
+
+    public function decideur(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'decided_by');
+    }
+
+    public function isApproved(): bool
+    {
+        if ($this->review_status === self::REVIEW_APPROVED) {
+            return true;
+        }
+
+        return $this->review_status === self::REVIEW_PENDING
+            && ($this->relationLoaded('demande') ? $this->demande : $this->demande()->first())?->isApproved() === true;
+    }
+
+    public function isRejected(): bool
+    {
+        return $this->review_status === self::REVIEW_REJECTED;
+    }
+
+    public function hasAllDocumentsValidated(): bool
+    {
+        $documents = $this->relationLoaded('documents') ? $this->documents : $this->documents()->get();
+
+        return $documents->isNotEmpty()
+            && $documents->every(fn (DemandeDocument $document) => $document->isValidated());
     }
 }

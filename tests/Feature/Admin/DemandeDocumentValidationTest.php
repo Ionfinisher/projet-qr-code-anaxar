@@ -7,6 +7,7 @@ use App\Models\DemandeCamion;
 use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\User;
+use App\Services\CreneauUsageService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -141,6 +142,53 @@ class DemandeDocumentValidationTest extends TestCase
         $this->assertTrue($freshDemande->hasAllDocumentsValidated());
         $this->assertNotNull($freshDemande->decided_at);
         $this->assertEquals($admin->id, $freshDemande->decided_by);
+    }
+
+    public function test_each_truck_can_be_approved_and_issued_a_qr_independently(): void
+    {
+        $admin = $this->createAdmin();
+        $transporteur = $this->createTransporteur();
+        $slot = $this->createSlot();
+        $demande = DemandeRdv::factory()->forUser($transporteur)->forCreneau($slot)->create();
+        $firstTruck = DemandeCamion::factory()->forDemande($demande, 1)->create();
+        $secondTruck = DemandeCamion::factory()->forDemande($demande, 2)->create();
+
+        foreach ([$firstTruck, $secondTruck] as $truck) {
+            foreach (['BL', 'CG'] as $type) {
+                DemandeDocument::create([
+                    'demande_rdv_id' => $demande->id,
+                    'demande_camion_id' => $truck->id,
+                    'type' => $type,
+                    'original_name' => "{$type}.pdf",
+                    'path' => "{$truck->id}-{$type}.pdf",
+                    'mime' => 'application/pdf',
+                    'size' => 10,
+                    'sha256' => hash('sha256', "{$truck->id}-{$type}"),
+                    'statut' => DemandeDocument::STATUT_EN_ATTENTE,
+                ]);
+            }
+        }
+
+        foreach ($firstTruck->documents as $document) {
+            $this->actingAs($admin)
+                ->post(route('admin.demandes.documents.validate', [$demande, $document]))
+                ->assertRedirect();
+        }
+
+        $this->assertSame(DemandeCamion::REVIEW_APPROVED, $firstTruck->fresh()->review_status);
+        $this->assertSame(DemandeCamion::REVIEW_PENDING, $secondTruck->fresh()->review_status);
+        $this->assertSame(DemandeRdv::STATUS_PARTIALLY_APPROVED, $demande->fresh()->status);
+        $this->assertSame(1, count($demande->fresh()->load('camions.documents')->camions->filter(
+            fn (DemandeCamion $truck) => $truck->isApproved() && $truck->hasAllDocumentsValidated()
+        )));
+
+        $rdvs = $this->actingAs($transporteur)->get(route('transporteur.rdv.index'));
+        $rdvs->assertOk()->assertInertia(fn ($page) => $page->has('rdvs', 1));
+
+        $usage = app(CreneauUsageService::class)->forCreneau($slot);
+        $this->assertSame(1, $usage['approved']);
+        $this->assertSame(1, $usage['pending']);
+        $this->assertSame(2, $usage['used']);
     }
 
     public function test_document_cannot_be_validated_if_demande_is_cancelled_or_rejected(): void

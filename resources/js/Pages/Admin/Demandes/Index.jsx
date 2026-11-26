@@ -20,6 +20,7 @@ import { DemandeAdminDetail } from './DemandeAdminDetail';
 
 const DEM_FILTERS = [
     { value: 'en_attente', label: 'À traiter' },
+    { value: 'partiellement_validee', label: 'Partiellement validées' },
     { value: 'validee', label: 'Validées' },
     { value: 'rejetee', label: 'Rejetées' },
     { value: 'annulee', label: 'Annulées' },

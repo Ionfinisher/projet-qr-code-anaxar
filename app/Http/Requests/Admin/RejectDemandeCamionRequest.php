@@ -1,10 +1,10 @@
 <?php
 
-namespace App\Http\Requests\Transporteur;
+namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class RejectDemandeRdvRequest extends FormRequest
+class RejectDemandeCamionRequest extends FormRequest
 {
     public function authorize(): bool
     {

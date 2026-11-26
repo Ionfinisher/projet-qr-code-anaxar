@@ -34,8 +34,10 @@ import {
     legacyDocuments,
 } from './DemandesParts';
 
-function DocumentLine({ docDef, meta, demande, onPreview, onValidate, validatingId }) {
-    const canValidate = demande?.status === 'en_attente' || demande?.status === 'validee';
+function DocumentLine({ docDef, meta, demande, truckStatus, truckLabel, onPreview, onValidate, validatingId }) {
+    const canValidate = truckStatus
+        ? truckStatus === 'en_attente' || (truckStatus === 'validee' && demande?.status === 'validee')
+        : demande?.status === 'en_attente' || demande?.status === 'validee';
     const isDocValide = meta?.statut === 'valide';
     const isValidating = validatingId === meta?.id;
 
@@ -78,7 +80,7 @@ function DocumentLine({ docDef, meta, demande, onPreview, onValidate, validating
                         variant="secondary"
                         size="sm"
                         icon="eye"
-                        onClick={() => onPreview({ ...meta, label: docDef.label })}
+                        onClick={() => onPreview({ ...meta, label: docDef.label, truckLabel, truckStatus })}
                     >
                         Voir
                     </Button>
@@ -124,7 +126,8 @@ function DocumentLine({ docDef, meta, demande, onPreview, onValidate, validating
 export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
     const { doc_types } = usePage().props;
     const rdvDocs = getRdvDocs(doc_types);
-    const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
+    const [confirmRejectTruck, setConfirmRejectTruck] = useState(null);
+    const [confirmTruckDoc, setConfirmTruckDoc] = useState(null);
     const [rejectReason, setRejectReason] = useState(DEM_REJECT[0]);
     const [rejectComment, setRejectComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -149,9 +152,10 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
         sum + rdvDocs.filter((def) => docsFor(truck.id)[def.key]).length
     ), 0) + (trucks.length ? 0 : rdvDocs.filter((def) => docsByTruck.legacy?.[def.key]).length);
     const totalDocs = Math.max(trucks.length, 1) * rdvDocs.length;
-    const isPending = d.status === 'en_attente';
+    const hasPendingTrucks = trucks.some((truck) => truck.review_status === 'en_attente');
+    const isPending = d.status === 'en_attente' || d.status === 'partiellement_validee';
 
-    const handleValidateDocument = (doc) => {
+    const handleValidateDocument = (doc, closePreviewAfter = false) => {
         if (!doc?.id) return;
         setValidatingDocId(doc.id);
         router.post(
@@ -159,6 +163,9 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
             {},
             {
                 preserveScroll: true,
+                onSuccess: () => {
+                    if (closePreviewAfter) setPreviewDoc(null);
+                },
                 onFinish: () => {
                     setValidatingDocId(null);
                 },
@@ -166,10 +173,11 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
         );
     };
 
-    const handleReject = () => {
+    const handleRejectTruck = () => {
+        if (!confirmRejectTruck) return;
         setSubmitting(true);
         router.post(
-            route('admin.demandes.reject', d.reference),
+            route('admin.demandes.camions.reject', [d.reference, confirmRejectTruck.id]),
             {
                 reason: rejectReason,
                 comment: rejectComment,
@@ -177,7 +185,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
             {
                 preserveScroll: true,
                 onSuccess: () => {
-                    setConfirmRejectOpen(false);
+                    setConfirmRejectTruck(null);
                     setRejectComment('');
                 },
                 onFinish: () => {
@@ -261,7 +269,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
             )}
 
             {/* Contrôles automatiques & Actions si en attente */}
-            {isPending && (
+            {hasPendingTrucks && (
                 <Card>
                     <SectionTitle
                         icon="list-checks"
@@ -292,16 +300,9 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
 
                     <div className="mt-5">
                         <DecisionBar>
-                            <Button
-                                variant="danger-outline"
-                                icon="x"
-                                onClick={() => setConfirmRejectOpen(true)}
-                            >
-                                Rejeter la demande
-                            </Button>
                             <p className="flex items-center gap-1.5 text-xs text-slate-500 pl-1">
                                 <Icon name="info" size={14} className="shrink-0 text-slate-400" />
-                                <span>La validation s'effectue document par document ci-dessous. Dès que tous les documents sont validés, la demande est automatiquement approuvée et les QR codes sont émis.</span>
+                                <span>Validez les documents ou rejetez un camion individuellement. Chaque camion conforme reçoit son rendez-vous et son QR code sans attendre les autres.</span>
                             </p>
                         </DecisionBar>
                     </div>
@@ -450,9 +451,17 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                 key: 'dcs',
                                 header: 'Documents',
                                 render: (t) =>
-                                    <span className="font-mono text-[13px] text-slate-700">
-                                        {rdvDocs.filter((def) => docsFor(t.id)[def.key]?.statut === 'valide').length} / {rdvDocs.length} Validé(s)
-                                    </span>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="font-mono text-[13px] text-slate-700">
+                                            {rdvDocs.filter((def) => docsFor(t.id)[def.key]?.statut === 'valide').length} / {rdvDocs.length} Validé(s)
+                                        </span>
+                                        <Badge
+                                            size="sm"
+                                            tone={t.review_status === 'validee' ? 'ok' : t.review_status === 'rejetee' ? 'bad' : 'warn'}
+                                        >
+                                            {t.review_status === 'validee' ? 'Validé' : t.review_status === 'rejetee' ? 'Rejeté' : 'À traiter'}
+                                        </Badge>
+                                    </div>
                             },
                             {
                                 key: 'pass',
@@ -486,7 +495,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                     if (!rdv) {
                                         return (
                                             <span className="text-xs text-slate-400">
-                                                {d.status === 'validee' ? 'Génération…' : 'Non émis'}
+                                                {r.review_status === 'validee' ? 'Documents à vérifier' : 'Non émis'}
                                             </span>
                                         );
                                     }
@@ -543,10 +552,34 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                             </span>
                                         ) : null}
                                     </p>
-                                    <Badge tone={count === rdvDocs.length ? 'ok' : 'neutral'}>
-                                        {count}/{rdvDocs.length}
-                                    </Badge>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <Badge
+                                            tone={truck.review_status === 'validee' ? 'ok' : truck.review_status === 'rejetee' ? 'bad' : 'warn'}
+                                        >
+                                            {truck.review_status === 'validee' ? 'Validé' : truck.review_status === 'rejetee' ? 'Rejeté' : 'À traiter'}
+                                        </Badge>
+                                        <Badge tone={count === rdvDocs.length ? 'ok' : 'neutral'}>
+                                            {count}/{rdvDocs.length}
+                                        </Badge>
+                                        {truck.review_status === 'en_attente' && (
+                                            <Button
+                                                type="button"
+                                                variant="danger-outline"
+                                                size="sm"
+                                                icon="x"
+                                                onClick={() => setConfirmRejectTruck(truck)}
+                                            >
+                                                Rejeter ce camion
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
+                                {truck.review_status === 'rejetee' && (
+                                    <Alert tone="bad" title="Camion rejeté" className="mb-3">
+                                        <p>{truck.rejection_reason}</p>
+                                        {truck.rejection_comment && <p className="mt-1">{truck.rejection_comment}</p>}
+                                    </Alert>
+                                )}
                                 <ul className="flex flex-col divide-y divide-slate-100">
                                     {rdvDocs.map((docDef) => (
                                         <DocumentLine
@@ -554,8 +587,13 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                             docDef={docDef}
                                             meta={docs[docDef.key]}
                                             demande={d}
+                                            truckStatus={truck.review_status}
+                                            truckLabel={`Camion ${index + 1}${truck.vehicle?.tractor ? ` (${truck.vehicle.tractor})` : ''}`}
                                             onPreview={setPreviewDoc}
-                                            onValidate={handleValidateDocument}
+                                            onValidate={(doc) => setConfirmTruckDoc({
+                                                doc: { ...doc, label: docDef.label },
+                                                truckLabel: `Camion ${index + 1}${truck.vehicle?.tractor ? ` (${truck.vehicle.tractor})` : ''}`,
+                                            })}
                                             validatingId={validatingDocId}
                                         />
                                     ))}
@@ -605,16 +643,54 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 <HistoryTimeline items={d.history || []} />
             </Card>
 
-            {/* Modal de rejet */}
+            {/* Confirmation de validation d'un document camion */}
             <Modal
-                open={confirmRejectOpen}
-                onClose={() => !submitting && setConfirmRejectOpen(false)}
-                title={`Rejeter la demande ${d.reference}`}
+                open={!!confirmTruckDoc}
+                onClose={() => setConfirmTruckDoc(null)}
+                title="Confirmer la validation du document"
+            >
+                {confirmTruckDoc && (
+                    <>
+                        <p className="text-sm text-slate-600">
+                            Confirmez-vous la validation de <strong className="text-slate-900">{confirmTruckDoc.doc.label}</strong>
+                            {' '}pour <strong className="text-slate-900">{confirmTruckDoc.truckLabel}</strong> ?
+                        </p>
+                        <p className="text-sm text-slate-500">{confirmTruckDoc.doc.name}</p>
+                        <div className="flex justify-end gap-2">
+                            <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => setConfirmTruckDoc(null)}
+                            >
+                                Annuler
+                            </Button>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                icon="check"
+                                loading={validatingDocId === confirmTruckDoc.doc.id}
+                                onClick={() => {
+                                    const doc = confirmTruckDoc.doc;
+                                    setConfirmTruckDoc(null);
+                                    handleValidateDocument(doc, confirmTruckDoc.closePreviewAfter);
+                                }}
+                            >
+                                Confirmer la validation
+                            </Button>
+                        </div>
+                    </>
+                )}
+            </Modal>
+
+            {/* Modal de rejet d'un camion */}
+            <Modal
+                open={!!confirmRejectTruck}
+                onClose={() => !submitting && setConfirmRejectTruck(null)}
+                title={`Rejeter le camion ${confirmRejectTruck?.position || ''}`}
             >
                 <div className="flex flex-col gap-4">
                     <p className="text-sm text-slate-600">
-                        Le rejet informera le transporteur du motif de non-conformité de sa demande{' '}
-                        <strong className="font-mono text-slate-900">{d.reference}</strong>.
+                        Le rejet concerne uniquement ce camion. Le transporteur pourra le corriger et le renvoyer; les autres camions et leurs rendez-vous ne seront pas modifiés.
                     </p>
 
                     <Field id="reject-reason" label="Motif du rejet" required>
@@ -647,7 +723,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                         <Button
                             variant="secondary"
                             disabled={submitting}
-                            onClick={() => setConfirmRejectOpen(false)}
+                            onClick={() => setConfirmRejectTruck(null)}
                         >
                             Annuler
                         </Button>
@@ -655,7 +731,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                             variant="danger"
                             icon="x"
                             loading={submitting}
-                            onClick={handleReject}
+                            onClick={handleRejectTruck}
                         >
                             Confirmer le rejet
                         </Button>
@@ -687,7 +763,27 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                 className="mx-auto max-h-[70vh] max-w-full rounded-xl object-contain shadow-sm"
                             />
                         )}
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-2">
+                            {previewDoc.camion_id
+                                && previewDoc.statut !== 'valide'
+                                && (previewDoc.truckStatus === 'en_attente'
+                                    || (previewDoc.truckStatus === 'validee' && d.status === 'validee')) && (
+                                    <Button
+                                        variant="primary"
+                                        icon="check"
+                                        disabled={validatingDocId === previewDoc.id}
+                                        onClick={() => {
+                                            setConfirmTruckDoc({
+                                                doc: previewDoc,
+                                                truckLabel: previewDoc.truckLabel || `Camion ${previewDoc.position || ''}`,
+                                                closePreviewAfter: true,
+                                            });
+                                            setPreviewDoc(null);
+                                        }}
+                                    >
+                                        Valider le document
+                                    </Button>
+                                )}
                             <Button variant="secondary" onClick={() => setPreviewDoc(null)}>
                                 Fermer
                             </Button>

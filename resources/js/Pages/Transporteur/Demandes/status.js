@@ -4,6 +4,7 @@ export { OPS as OP_META, TERMINALS };
 
 export const STATUS_META = {
   en_attente: { label: 'En attente', tone: 'warn', icon: 'hourglass' },
+  partiellement_validee: { label: 'Partiellement validée', tone: 'warn', icon: 'clock' },
   validee: { label: 'Validée', tone: 'ok', icon: 'circle-check' },
   rejetee: { label: 'Rejetée', tone: 'bad', icon: 'circle-x' },
   annulee: { label: 'Annulée', tone: 'neutral', icon: 'calendar-x' },
@@ -14,6 +15,8 @@ export const EVENT_META = {
   modifiee: { label: 'Demande modifiée', tone: 'info', icon: 'pencil' },
   annulee: { label: 'Demande annulée', tone: 'neutral', icon: 'calendar-x' },
   document_valide: { label: 'Document validé', tone: 'ok', icon: 'file-check' },
+  camion_rejete: { label: 'Camion rejeté', tone: 'bad', icon: 'circle-x' },
+  camion_renvoye: { label: 'Camion renvoyé', tone: 'info', icon: 'send' },
   validee: { label: 'Demande validée', tone: 'ok', icon: 'circle-check' },
   rejetee: { label: 'Demande rejetée', tone: 'bad', icon: 'circle-x' },
 };

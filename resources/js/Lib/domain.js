@@ -936,6 +936,12 @@ export const DEM_STATUS = {
         tone: "info",
         icon: "hourglass",
     },
+    partiellement_validee: {
+        label: "Partiellement validée",
+        short: "Partielle",
+        tone: "warn",
+        icon: "clock",
+    },
     validee: {
         label: "Validée · QR émis",
         short: "Validée",

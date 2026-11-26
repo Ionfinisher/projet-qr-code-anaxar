@@ -72,8 +72,8 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
 
     Route::get('/demandes', [AdminDemandeRdvController::class, 'index'])->name('demandes.index');
     Route::get('/demandes/{demande}', [AdminDemandeRdvController::class, 'show'])->name('demandes.show');
-    Route::post('/demandes/{demande}/approve', [AdminDemandeRdvController::class, 'approve'])->name('demandes.approve');
-    Route::post('/demandes/{demande}/reject', [AdminDemandeRdvController::class, 'reject'])->name('demandes.reject');
+    Route::post('/demandes/{demande}/camions/{camion}/reject', [AdminDemandeRdvController::class, 'rejectTruck'])
+        ->name('demandes.camions.reject');
     Route::get('/demandes/{demande}/documents/{document}/apercu', [AdminDemandeRdvController::class, 'previewDocument'])
         ->name('demandes.documents.preview');
     Route::post('/demandes/{demande}/documents/{document}/valider', [AdminDemandeRdvController::class, 'validateDocument'])
@@ -115,6 +115,10 @@ Route::middleware(['auth', 'verified', 'transporteur'])
         Route::get('/demandes/{demande}/envoyee', [DemandeRdvController::class, 'sent'])->name('demandes.sent');
         Route::get('/demandes/{demande}/modifier', [DemandeRdvController::class, 'edit'])->name('demandes.edit');
         Route::put('/demandes/{demande}', [DemandeRdvController::class, 'update'])->name('demandes.update');
+        Route::get('/demandes/{demande}/camions/{camion}/corriger', [DemandeRdvController::class, 'editTruckCorrection'])
+            ->name('demandes.camions.edit');
+        Route::put('/demandes/{demande}/camions/{camion}/renvoyer', [DemandeRdvController::class, 'resubmitTruck'])
+            ->name('demandes.camions.resubmit');
         Route::post('/demandes/{demande}/annuler', [DemandeRdvController::class, 'cancel'])->name('demandes.cancel');
         Route::get('/demandes/{demande}/documents/{document}/telecharger', [DemandeDocumentController::class, 'download'])
             ->name('demandes.documents.download');

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Transporteur;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Transporteur\CancelDemandeRdvRequest;
+use App\Http\Requests\Transporteur\ResubmitDemandeCamionRequest;
 use App\Http\Requests\Transporteur\StoreDemandeRdvRequest;
 use App\Http\Requests\Transporteur\UpdateDemandeRdvRequest;
+use App\Models\DemandeCamion;
 use App\Models\DemandeRdv;
 use App\Services\CreneauCalendarService;
 use App\Services\CreneauUsageService;
@@ -33,6 +35,7 @@ class DemandeRdvController extends Controller
         $allowedStatuses = [
             'all',
             DemandeRdv::STATUS_PENDING,
+            DemandeRdv::STATUS_PARTIALLY_APPROVED,
             DemandeRdv::STATUS_APPROVED,
             DemandeRdv::STATUS_REJECTED,
             DemandeRdv::STATUS_CANCELLED,
@@ -77,6 +80,7 @@ class DemandeRdvController extends Controller
         $counts = [
             'all' => array_sum($rawCounts),
             DemandeRdv::STATUS_PENDING => (int) ($rawCounts[DemandeRdv::STATUS_PENDING] ?? 0),
+            DemandeRdv::STATUS_PARTIALLY_APPROVED => (int) ($rawCounts[DemandeRdv::STATUS_PARTIALLY_APPROVED] ?? 0),
             DemandeRdv::STATUS_APPROVED => (int) ($rawCounts[DemandeRdv::STATUS_APPROVED] ?? 0),
             DemandeRdv::STATUS_REJECTED => (int) ($rawCounts[DemandeRdv::STATUS_REJECTED] ?? 0),
             DemandeRdv::STATUS_CANCELLED => (int) ($rawCounts[DemandeRdv::STATUS_CANCELLED] ?? 0),
@@ -177,7 +181,7 @@ class DemandeRdvController extends Controller
         $terminals = \App\Models\Terminal::query()->active()->orderBy('code')->get(['id', 'code', 'short', 'label']);
 
         return Inertia::render('Transporteur/Demandes/Edit', [
-            'demande' => DemandeRdvPresenter::form($demande),
+            'demande' => DemandeRdvPresenter::form($demande, $request->user()),
             'slots' => $this->calendar->upcoming(
                 $request->user(),
                 14,
@@ -196,6 +200,40 @@ class DemandeRdvController extends Controller
         return redirect()
             ->route('transporteur.demandes.index')
             ->with('success', 'Votre demande a été mise à jour.');
+    }
+
+    public function editTruckCorrection(Request $request, DemandeRdv $demande, DemandeCamion $camion): Response
+    {
+        abort_unless($camion->demande_rdv_id === $demande->id, 404);
+        $this->authorize('updateTruck', [$demande, $camion]);
+
+        $demande->load(['creneau', 'camions.documents', 'documents']);
+        $detail = DemandeRdvPresenter::detail(
+            $demande,
+            $request->user(),
+            $this->usage->forCreneau($demande->creneau)
+        );
+
+        return Inertia::render('Transporteur/Demandes/CorrectTruck', [
+            'demande' => DemandeRdvPresenter::form($demande, $request->user()),
+            'reference' => $demande->reference,
+            'camion' => DemandeRdvPresenter::truck($camion, $demande, $request->user()),
+            'docs' => $detail['docs'][(string) $camion->id] ?? [],
+            'me' => TransporteurPresenter::me($request->user()),
+        ]);
+    }
+
+    public function resubmitTruck(
+        ResubmitDemandeCamionRequest $request,
+        DemandeRdv $demande,
+        DemandeCamion $camion
+    ): RedirectResponse {
+        abort_unless($camion->demande_rdv_id === $demande->id, 404);
+        $this->service->resubmitTruck($demande, $camion, $request->validated(), $request->user());
+
+        return redirect()
+            ->route('transporteur.demandes.sent', $demande->reference)
+            ->with('success', "Le camion {$camion->position} a été renvoyé pour validation.");
     }
 
     public function cancel(CancelDemandeRdvRequest $request, DemandeRdv $demande): RedirectResponse

@@ -19,16 +19,24 @@ class RdvController extends Controller
         $selectedId = $request->query('id');
 
         $baseQuery = DemandeCamion::query()
-            ->whereHas('demande', function ($q) {
-                $q->where('status', DemandeRdv::STATUS_APPROVED);
+            ->whereHas('demande', fn ($query) => $query->whereIn('status', [
+                DemandeRdv::STATUS_APPROVED,
+                DemandeRdv::STATUS_PARTIALLY_APPROVED,
+            ]))
+            ->where(function ($query) {
+                $query->where('review_status', DemandeCamion::REVIEW_APPROVED)
+                    ->orWhereHas('demande', fn ($q) => $q->where('status', DemandeRdv::STATUS_APPROVED));
             })
             ->with([
                 'demande.creneau',
                 'demande.user',
                 'demande.documents',
+                'documents',
             ]);
 
-        $allCamions = (clone $baseQuery)->get();
+        $allCamions = (clone $baseQuery)->get()
+            ->filter(fn (DemandeCamion $camion) => $camion->isApproved() && $camion->hasAllDocumentsValidated())
+            ->values();
         $allRdvs = $allCamions->map(fn (DemandeCamion $c) => DemandeRdvPresenter::rdv($c, $c->demande));
 
         // Filter by search needle
