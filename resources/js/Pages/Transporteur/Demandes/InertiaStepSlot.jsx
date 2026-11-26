@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Field, Input, RadioCards, Textarea } from '@/Components/ui';
+import { EmptyState, Field, Input, RadioCards, Textarea } from '@/Components/ui';
 import { Meter } from '@/Components/ui';
 import { addDays, dayStr, fmtDayNum, fmtDayLong, fmtWeekday, OPS, slotRange, TERMINALS } from '@/Lib/domain';
 import { cn } from '@/Lib/cn';
@@ -85,7 +85,7 @@ export default function InertiaStepSlot({ form, slots, terminals = [], truckCoun
             return terminals.map((t) => ({
                 value: t.code,
                 label: t.label,
-                description: `Port de Lomé · ${t.short}`,
+                description: `${t.short}`,
             }));
         }
         return Object.entries(TERMINALS).map(([value, terminal]) => ({
@@ -118,21 +118,44 @@ export default function InertiaStepSlot({ form, slots, terminals = [], truckCoun
     return (
         <div className="flex flex-col gap-5">
             <section className="flex flex-col gap-4">
-                <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">Opération</h2>
+                <div className="flex items-baseline justify-between">
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        Opération
+                        <span className="text-rose-600" aria-hidden="true"> *</span>
+                    </h2>
+                </div>
                 <RadioCards
                     label="Type d’opération"
                     columns={2}
                     value={form.data.op}
-                    onChange={(value) => form.setData('op', value)}
+                    invalid={!!form.errors.op}
+                    onChange={(value) => {
+                        form.setData('op', value);
+                        if (form.errors.op) form.clearErrors('op');
+                    }}
                     options={Object.entries(OPS).map(([value, operation]) => ({ value, label: operation.label, description: operation.hint }))}
                 />
+                {form.errors.op ? <p role="alert" className="text-sm text-rose-700">{form.errors.op}</p> : null}
+            </section>
+            <section className="flex flex-col gap-4">
+                <div className="flex items-baseline justify-between">
+                    <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                        Terminal
+                        <span className="text-rose-600" aria-hidden="true"> *</span>
+                    </h2>
+                </div>
                 <RadioCards
                     label="Terminal"
                     columns={3}
                     value={form.data.terminal}
-                    onChange={handleTerminalChange}
+                    invalid={!!form.errors.terminal}
+                    onChange={(value) => {
+                        handleTerminalChange(value);
+                        if (form.errors.terminal) form.clearErrors('terminal');
+                    }}
                     options={terminalOptions}
                 />
+                {form.errors.terminal ? <p role="alert" className="text-sm text-rose-700">{form.errors.terminal}</p> : null}
             </section>
             {!isTransit ? (
                 <Field id="transitaire" label="Commissionnaire en douane / transitaire" optional>
@@ -141,13 +164,27 @@ export default function InertiaStepSlot({ form, slots, terminals = [], truckCoun
             ) : null}
             <section className="flex flex-col gap-4">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-slate-900">Date et créneau</h2>
-                <SlotPicker
-                    slots={filteredSlots}
-                    value={selected}
-                    need={truckCount}
-                    onPick={(slot) => form.setData('slot', `${slot.date}|${slot.start}`)}
-                />
-                {form.errors.slot ? <p role="alert" className="text-sm text-rose-700">{form.errors.slot}</p> : <p className="text-sm text-slate-500">Places restantes en temps réel pour le terminal {form.data.terminal} · {truckCount} place{truckCount > 1 ? 's' : ''} nécessaire{truckCount > 1 ? 's' : ''}. Tolérance de 15 min à la guérite.</p>}
+                {!form.data.terminal ? (
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/50 py-4">
+                        <EmptyState
+                            icon="x"
+                            title="Aucun terminal sélectionné"
+                            className="py-6"
+                        >
+                            Veuillez d’abord choisir un terminal ci-dessus pour afficher les dates et créneaux disponibles.
+                        </EmptyState>
+                    </div>
+                ) : (
+                    <>
+                        <SlotPicker
+                            slots={filteredSlots}
+                            value={selected}
+                            need={truckCount}
+                            onPick={(slot) => form.setData('slot', `${slot.date}|${slot.start}`)}
+                        />
+                        {form.errors.slot ? <p role="alert" className="text-sm text-rose-700">{form.errors.slot}</p> : <p className="text-sm text-slate-500">Places restantes en temps réel pour le terminal {form.data.terminal} · {truckCount} place{truckCount > 1 ? 's' : ''} nécessaire{truckCount > 1 ? 's' : ''}. Tolérance de 15 min à la guérite.</p>}
+                    </>
+                )}
                 <Field id="notes" label="Instructions particulières" optional hint="Conteneur frigorifique à brancher, hors gabarit, marchandises dangereuses (classe IMDG)…">
                     <Textarea id="notes" rows={3} maxLength={1000} value={form.data.notes} onChange={(event) => form.setData('notes', event.target.value)} />
                 </Field>

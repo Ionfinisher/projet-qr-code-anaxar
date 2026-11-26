@@ -60,6 +60,29 @@ final class DemandeRdvPresenter
 
         $mandated = self::mandated($demande);
 
+        $docs = $demande->relationLoaded('documents') ? $demande->documents : $demande->documents()->get();
+        if ($demande->relationLoaded('camions')) {
+            $camionPositionMap = $demande->camions->pluck('position', 'id')->all();
+        } else {
+            $camionPositionMap = $demande->camions()->pluck('position', 'id')->all();
+        }
+        $totalDocsCount = $docs->count();
+        $validatedDocsCount = $docs->filter(fn (DemandeDocument $d) => $d->isValidated())->count();
+        $allDocsValidated = $totalDocsCount > 0 && $totalDocsCount === $validatedDocsCount;
+        $pendingDocsList = $docs
+            // ->filter(fn (DemandeDocument $d) => ! $d->isValidated())
+            ->map(fn (DemandeDocument $d) => [
+                'id' => $d->id,
+                'type' => $d->type,
+                'label' => $d->typeLabel(),
+                'camion_id' => $d->demande_camion_id,
+                'position' => $d->demande_camion_id ? ($camionPositionMap[$d->demande_camion_id] ?? null) : null,
+                'name' => $d->original_name,
+                'status' => $d->statut,
+            ])
+            ->values()
+            ->all();
+
         return array_merge(self::summary($demande, $viewer), [
             'op' => $demande->operation,
             'submittedAt' => $demande->submitted_at?->toIso8601String(),
@@ -68,6 +91,11 @@ final class DemandeRdvPresenter
             'transitaire' => $demande->transitaire,
             'mandated' => $mandated,
             'transporter' => $mandated,
+            'documents_validated' => $allDocsValidated,
+            'total_documents_count' => $totalDocsCount,
+            'validated_documents_count' => $validatedDocsCount,
+            'pending_documents_count' => $totalDocsCount - $validatedDocsCount,
+            'pending_documents' => $pendingDocsList,
             'owner' => $demande->user ? [
                 'id' => $demande->user->id,
                 'name' => $demande->user->name ?: trim(($demande->user->prenom ?? '').' '.($demande->user->nom ?? '')),
@@ -155,6 +183,7 @@ final class DemandeRdvPresenter
      */
     private static function documentsByTruck(DemandeRdv $demande, ?User $viewer = null): array
     {
+        $demande->loadMissing('documents.validator');
         $documents = [];
 
         foreach ($demande->camions as $camion) {
@@ -203,6 +232,9 @@ final class DemandeRdvPresenter
     public static function truck(DemandeCamion $camion, ?DemandeRdv $demande = null): array
     {
         $demande = $demande ?? ($camion->relationLoaded('demande') ? $camion->demande : null);
+        $rdvId = $demande ? 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6)) : null;
+        $canEmitToken = $demande && $demande->isApproved() && $demande->hasAllDocumentsValidated();
+        $token = $canEmitToken ? self::generateToken($demande, $camion) : null;
         $rdvId = $demande ? RdvId::for($camion, $demande) : null;
         $token = ($demande && $demande->isApproved()) ? self::generateToken($demande, $camion) : null;
 
@@ -210,6 +242,7 @@ final class DemandeRdvPresenter
             'id' => $camion->id,
             'rdv_id' => $rdvId,
             'token' => $token,
+            'documents_validated' => $demande ? $demande->hasAllDocumentsValidated() : false,
             'position' => $camion->position,
             'driver' => [
                 'first' => $camion->driver_first,
@@ -238,10 +271,11 @@ final class DemandeRdvPresenter
     public static function rdv(DemandeCamion $camion, ?DemandeRdv $demande = null): array
     {
         $demande = $demande ?? $camion->demande;
-        $demande->loadMissing(['creneau', 'user', 'camions.documents']);
+        $demande->loadMissing(['creneau', 'user', 'camions.documents', 'documents.validator']);
 
-        $rdvId = RdvId::for($camion, $demande);
-        $token = self::generateToken($demande, $camion);
+        $rdvId = 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6));
+        $canEmitToken = $demande->isApproved() && $demande->hasAllDocumentsValidated();
+        $token = $canEmitToken ? self::generateToken($demande, $camion) : null;
 
         $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : $camion->documents()->get();
         $docsMap = $camionDocuments->keyBy('type')->map(fn (DemandeDocument $doc) => [
@@ -250,6 +284,9 @@ final class DemandeRdvPresenter
             'size' => $doc->size,
             'sha256' => $doc->sha256,
             'mime' => $doc->mime,
+            'statut' => $doc->statut,
+            'validated_at' => $doc->validated_at?->toIso8601String(),
+            'validated_by' => $doc->validator?->name,
         ])->all();
 
         return [
@@ -379,19 +416,29 @@ final class DemandeRdvPresenter
      */
     public static function document(DemandeRdv $demande, DemandeDocument $document, ?User $viewer = null): array
     {
-        $url = $viewer && $viewer->isAdmin()
-            ? route('admin.demandes.documents.download', [$demande, $document])
-            : route('transporteur.demandes.documents.download', [$demande, $document]);
+        $previewUrl = $viewer && $viewer->isAdmin()
+            ? route('admin.demandes.documents.preview', [$demande, $document])
+            : null;
+
+        $downloadUrl = ! ($viewer && $viewer->isAdmin())
+            ? route('transporteur.demandes.documents.download', [$demande, $document])
+            : null;
 
         return [
             'id' => $document->id,
             'camion_id' => $document->demande_camion_id,
             'type' => $document->type,
+            'type_label' => $document->typeLabel(),
+            'label' => $document->typeLabel(),
             'name' => $document->original_name,
             'size' => $document->size,
             'mime' => $document->mime,
             'sha256' => $document->sha256,
-            'url' => $url,
+            'statut' => $document->statut ?? DemandeDocument::STATUT_EN_ATTENTE,
+            'validated_at' => $document->validated_at?->toIso8601String(),
+            'validated_by' => $document->relationLoaded('validator') ? $document->validator?->name : null,
+            'preview_url' => $previewUrl,
+            'url' => $downloadUrl,
         ];
     }
 

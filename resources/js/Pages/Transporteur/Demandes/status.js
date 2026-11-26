@@ -13,6 +13,7 @@ export const EVENT_META = {
   soumise: { label: 'Demande envoyée', tone: 'info', icon: 'send' },
   modifiee: { label: 'Demande modifiée', tone: 'info', icon: 'pencil' },
   annulee: { label: 'Demande annulée', tone: 'neutral', icon: 'calendar-x' },
+  document_valide: { label: 'Document validé', tone: 'ok', icon: 'file-check' },
   validee: { label: 'Demande validée', tone: 'ok', icon: 'circle-check' },
   rejetee: { label: 'Demande rejetée', tone: 'bad', icon: 'circle-x' },
 };

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import {
     OPS,
     TERMINALS,
     DOCS,
+    getRdvDocs,
     DEM_STATUS,
     DEM_REJECT,
     ACCOUNT_KINDS,
@@ -33,27 +34,34 @@ import {
     legacyDocuments,
 } from './DemandesParts';
 
-function DocumentLine({ docDef, meta }) {
+function DocumentLine({ docDef, meta, demande, onPreview, onValidate, validatingId }) {
+    const canValidate = demande?.status === 'en_attente' || demande?.status === 'validee';
+    const isDocValide = meta?.statut === 'valide';
+    const isValidating = validatingId === meta?.id;
+
     return (
-        <li className="flex items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+        <li className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
             <div className="flex items-start gap-3">
                 <span
-                    className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        meta ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                    }`}
+                    className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${isDocValide
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : meta
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}
                 >
-                    <Icon name={meta ? 'file-check' : 'file-x'} size={18} />
+                    <Icon name={isDocValide ? 'circle-check' : meta ? 'file-text' : 'file-x'} size={18} />
                 </span>
                 <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-900">{docDef.label}</p>
-                    <p className="mt-0.5 flex flex-wrap gap-x-2 text-[13px] text-slate-500">
+                    <p className="mt-0.5 flex flex-col flex-wrap gap-x-2 text-[13px] text-slate-500">
                         {meta ? (
                             <>
-                                <span className="truncate">{meta.name}</span>
-                                {meta.size > 0 && <span>{fmtSize(meta.size)}</span>}
-                                {meta.sha256 && (
-                                    <span className="font-mono text-xs">
-                                        SHA-256 {meta.sha256.slice(0, 10)}…
+                                <span className="truncate">{meta.name}・{meta.size > 0 && <span>{fmtSize(meta.size)}</span>}</span>
+
+                                {isDocValide && meta.validated_at && (
+                                    <span className="text-emerald-700 font-medium">
+                                        Validé {fmtDateTime(meta.validated_at)}
                                     </span>
                                 )}
                             </>
@@ -63,19 +71,48 @@ function DocumentLine({ docDef, meta }) {
                     </p>
                 </div>
             </div>
-            <div>
-                {meta?.url ? (
-                    <a
-                        href={meta.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            <div className="flex flex-wrap items-center gap-2">
+                {meta?.preview_url ? (
+                    <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        icon="eye"
+                        onClick={() => onPreview({ ...meta, label: docDef.label })}
                     >
-                        <Icon name="download" size={14} />
-                        <span>Télécharger</span>
-                    </a>
+                        Voir
+                    </Button>
+                ) : null}
+
+                {meta ? (
+                    isDocValide ? (
+                        <Button
+                            type="button"
+                            variant="primary"
+                            disabled
+                            size="sm"
+                            icon="check"
+                        >
+                            Valider
+                        </Button>
+                    ) : canValidate ? (
+                        <Button
+                            type="button"
+                            variant="primary"
+                            size="sm"
+                            icon="check"
+                            loading={isValidating}
+                            onClick={() => onValidate(meta)}
+                        >
+                            Valider
+                        </Button>
+                    ) : (
+                        <Badge tone="warn" icon="clock">
+                            En attente de validation
+                        </Badge>
+                    )
                 ) : (
-                    <Badge tone="warn" icon="triangle-alert">
+                    <Badge tone="bad" icon="triangle-alert">
                         Manquante
                     </Badge>
                 )}
@@ -85,13 +122,15 @@ function DocumentLine({ docDef, meta }) {
 }
 
 export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
-    const [confirmApproveOpen, setConfirmApproveOpen] = useState(false);
-    const [approveComment, setApproveComment] = useState('');
+    const { doc_types } = usePage().props;
+    const rdvDocs = getRdvDocs(doc_types);
     const [confirmRejectOpen, setConfirmRejectOpen] = useState(false);
     const [rejectReason, setRejectReason] = useState(DEM_REJECT[0]);
     const [rejectComment, setRejectComment] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [viewingPassRdv, setViewingPassRdv] = useState(null);
+    const [previewDoc, setPreviewDoc] = useState(null);
+    const [validatingDocId, setValidatingDocId] = useState(null);
 
     if (!d) return null;
 
@@ -107,24 +146,21 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
     const inheritedDocs = legacyDocuments(d);
     const docsFor = (truckId) => docsByTruck[String(truckId)] || {};
     const countUploadedDocs = trucks.reduce((sum, truck) => (
-        sum + DOCS.filter((def) => docsFor(truck.id)[def.key]).length
-    ), 0) + (trucks.length ? 0 : DOCS.filter((def) => docsByTruck.legacy?.[def.key]).length);
-    const totalDocs = Math.max(trucks.length, 1) * DOCS.length;
+        sum + rdvDocs.filter((def) => docsFor(truck.id)[def.key]).length
+    ), 0) + (trucks.length ? 0 : rdvDocs.filter((def) => docsByTruck.legacy?.[def.key]).length);
+    const totalDocs = Math.max(trucks.length, 1) * rdvDocs.length;
     const isPending = d.status === 'en_attente';
 
-    const handleApprove = () => {
-        setSubmitting(true);
+    const handleValidateDocument = (doc) => {
+        if (!doc?.id) return;
+        setValidatingDocId(doc.id);
         router.post(
-            route('admin.demandes.approve', d.reference),
-            { comment: approveComment },
+            route('admin.demandes.documents.validate', [d.reference, doc.id]),
+            {},
             {
                 preserveScroll: true,
-                onSuccess: () => {
-                    setConfirmApproveOpen(false);
-                    setApproveComment('');
-                },
                 onFinish: () => {
-                    setSubmitting(false);
+                    setValidatingDocId(null);
                 },
             }
         );
@@ -166,6 +202,29 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                         Soumise le {fmtDateTime(d.submitted_at || d.submittedAt)}
                     </span>
                 </div>
+                {trucks.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                        <span className="text-xs font-medium text-slate-500">Validation des documents :</span>
+                        {trucks.map((truck, index) => {
+                            const docs = docsFor(truck.id);
+                            const validatedCount = rdvDocs.filter((def) => docs[def.key]?.statut === 'valide').length;
+                            const totalTruckDocs = rdvDocs.length;
+                            const isAllValidated = validatedCount === totalTruckDocs && totalTruckDocs > 0;
+
+                            return (
+                                <Badge
+                                    key={truck.id}
+                                    tone={isAllValidated ? 'ok' : 'bad'}
+                                    icon={isAllValidated ? 'circle-check' : 'file-text'}
+                                >
+                                    Camion {index + 1}
+                                    {truck.vehicle?.tractor ? ` (${truck.vehicle.tractor})` : ''} : {validatedCount}/{totalTruckDocs} validés
+                                </Badge>
+                            );
+                        })}
+                    </div>
+                )}
+
             </div>
 
             {/* Décision existante */}
@@ -219,9 +278,9 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                         {checks.map((c) => (
                             <li key={c.t} className="flex items-start gap-3">
                                 <Icon
-                                    name={c.ok ? 'circle-check' : 'circle-x'}
+                                    name={c.ok ? 'circle-check' : 'triangle-alert'}
                                     size={18}
-                                    className={c.ok ? 'mt-0.5 text-emerald-600' : 'mt-0.5 text-rose-600'}
+                                    className={c.ok ? 'mt-0.5 text-emerald-600' : 'mt-0.5 text-amber-500'}
                                 />
                                 <span className="min-w-0 text-sm">
                                     <b className="block font-semibold text-slate-900">{c.t}</b>
@@ -234,19 +293,16 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                     <div className="mt-5">
                         <DecisionBar>
                             <Button
-                                variant="ok"
-                                icon="qr-code"
-                                onClick={() => setConfirmApproveOpen(true)}
-                            >
-                                Valider · émettre {trucks.length} QR
-                            </Button>
-                            <Button
                                 variant="danger-outline"
                                 icon="x"
                                 onClick={() => setConfirmRejectOpen(true)}
                             >
-                                Rejeter
+                                Rejeter la demande
                             </Button>
+                            <p className="flex items-center gap-1.5 text-xs text-slate-500 pl-1">
+                                <Icon name="info" size={14} className="shrink-0 text-slate-400" />
+                                <span>La validation s'effectue document par document ci-dessous. Dès que tous les documents sont validés, la demande est automatiquement approuvée et les QR codes sont émis.</span>
+                            </p>
                         </DecisionBar>
                     </div>
                 </Card>
@@ -333,10 +389,10 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                             <ContainerNumber value={num} size="sm" placeholder="Vide" />
                                             {num && (
                                                 <Icon
-                                                    name={c.valid ? 'circle-check' : 'circle-x'}
+                                                    name={c.valid ? 'circle-check' : 'triangle-alert'}
                                                     size={15}
                                                     className={
-                                                        c.valid ? 'text-emerald-600' : 'text-rose-600'
+                                                        c.valid ? 'text-emerald-600' : 'text-amber-500'
                                                     }
                                                     label={
                                                         c.valid
@@ -390,18 +446,13 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                 ),
                             },
                             {
-                                key: 'lic',
-                                header: 'Permis',
-                                render: (r) =>
-                                    licenseValid(r.driver?.license) ? (
-                                        <span className="font-mono text-[13px] text-slate-700">
-                                            {r.driver.license}
-                                        </span>
-                                    ) : (
-                                        <Badge tone="bad" icon="triangle-alert">
-                                            Manquant
-                                        </Badge>
-                                    ),
+                                // Ratio de documents validés sur tous les documents par camion
+                                key: 'dcs',
+                                header: 'Documents',
+                                render: (t) =>
+                                    <span className="font-mono text-[13px] text-slate-700">
+                                        {rdvDocs.filter((def) => docsFor(t.id)[def.key]?.statut === 'valide').length} / {rdvDocs.length} Validé(s)
+                                    </span>
                             },
                             {
                                 key: 'pass',
@@ -411,25 +462,25 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                         d.rdvs?.find((x) => x.camion_id === r.id) ||
                                         (r.token
                                             ? {
-                                                  id: r.rdv_id || `PF-${d.reference}-${r.position}`,
-                                                  demandeId: d.reference,
-                                                  lot: trucks.length > 1 ? d.reference : null,
-                                                  lotIndex: r.position,
-                                                  lotSize: trucks.length,
-                                                  token: r.token,
-                                                  terminal: d.terminal,
-                                                  op: d.operation || d.op,
-                                                  slot: d.slot,
-                                                  transporter: {
-                                                      company:
-                                                          owner?.company || owner?.name || 'Transporteur',
-                                                      type: owner?.acct || 'entreprise',
-                                                  },
-                                                  driver: r.driver,
-                                                  vehicle: r.vehicle,
-                                                  container: r.container,
-                                                  issuedAt: d.decision?.at || d.updated_at,
-                                              }
+                                                id: r.rdv_id || `PF-${d.reference}-${r.position}`,
+                                                demandeId: d.reference,
+                                                lot: trucks.length > 1 ? d.reference : null,
+                                                lotIndex: r.position,
+                                                lotSize: trucks.length,
+                                                token: r.token,
+                                                terminal: d.terminal,
+                                                op: d.operation || d.op,
+                                                slot: d.slot,
+                                                transporter: {
+                                                    company:
+                                                        owner?.company || owner?.name || 'Transporteur',
+                                                    type: owner?.acct || 'entreprise',
+                                                },
+                                                driver: r.driver,
+                                                vehicle: r.vehicle,
+                                                container: r.container,
+                                                issuedAt: d.decision?.at || d.updated_at,
+                                            }
                                             : null);
 
                                     if (!rdv) {
@@ -462,9 +513,15 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 <SectionTitle
                     icon="file-check"
                     aside={
-                        <span className="text-[13px] tabular-nums text-slate-500">
-                            {countUploadedDocs}/{totalDocs}
-                        </span>
+                        d.pending_documents?.length === 0 ? (
+                            <Badge tone="ok" icon="circle-check">
+                                Tous les documents sont validés
+                            </Badge>
+                        ) : (
+                            <span className="text-[13px] tabular-nums text-slate-500">
+                                {countUploadedDocs}/{totalDocs}
+                            </span>
+                        )
                     }
                 >
                     Documents déposés par camion
@@ -473,7 +530,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 <div className="flex flex-col gap-5">
                     {trucks.map((truck, index) => {
                         const docs = docsFor(truck.id);
-                        const count = DOCS.filter((def) => docs[def.key]).length;
+                        const count = rdvDocs.filter((def) => docs[def.key]).length;
 
                         return (
                             <section key={truck.id} className="rounded-2xl border border-slate-200 p-3">
@@ -486,16 +543,20 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                             </span>
                                         ) : null}
                                     </p>
-                                    <Badge tone={count === DOCS.length ? 'ok' : 'neutral'}>
-                                        {count}/{DOCS.length}
+                                    <Badge tone={count === rdvDocs.length ? 'ok' : 'neutral'}>
+                                        {count}/{rdvDocs.length}
                                     </Badge>
                                 </div>
                                 <ul className="flex flex-col divide-y divide-slate-100">
-                                    {DOCS.map((docDef) => (
+                                    {rdvDocs.map((docDef) => (
                                         <DocumentLine
                                             key={docDef.key}
                                             docDef={docDef}
                                             meta={docs[docDef.key]}
+                                            demande={d}
+                                            onPreview={setPreviewDoc}
+                                            onValidate={handleValidateDocument}
+                                            validatingId={validatingDocId}
                                         />
                                     ))}
                                 </ul>
@@ -512,8 +573,12 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                                 {inheritedDocs.map((file) => (
                                     <DocumentLine
                                         key={file.id}
-                                        docDef={{ key: file.type, label: DOCS.find((doc) => doc.key === file.type)?.label || file.type }}
+                                        docDef={{ key: file.type, label: rdvDocs.find((doc) => doc.key === file.type)?.label || file.label || file.type }}
                                         meta={file}
+                                        demande={d}
+                                        onPreview={setPreviewDoc}
+                                        onValidate={handleValidateDocument}
+                                        validatingId={validatingDocId}
                                     />
                                 ))}
                             </ul>
@@ -522,7 +587,7 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
 
                     {!trucks.length && !inheritedDocs.length ? (
                         <ul className="flex flex-col divide-y divide-slate-100">
-                            {DOCS.map((docDef) => (
+                            {rdvDocs.map((docDef) => (
                                 <DocumentLine
                                     key={docDef.key}
                                     docDef={docDef}
@@ -540,73 +605,6 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 <HistoryTimeline items={d.history || []} />
             </Card>
 
-            {/* Modal de validation */}
-            <Modal
-                open={confirmApproveOpen}
-                onClose={() => !submitting && setConfirmApproveOpen(false)}
-                title={`Valider la demande ${d.reference}`}
-            >
-                <div className="flex flex-col gap-4">
-                    <p className="text-sm text-slate-600">
-                        Vous êtes sur le point de valider la demande{' '}
-                        <strong className="font-mono text-slate-900">{d.reference}</strong> pour{' '}
-                        <strong>{owner?.company || owner?.name || 'le transporteur'}</strong>.
-                    </p>
-
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs text-slate-700">
-                        <p>
-                            • <strong>{trucks.length} QR code(s)</strong> seront émis avec signature
-                            cryptographique sécurisée.
-                        </p>
-                        <p className="mt-1">
-                            • Créneau assigné : <strong>{slot?.date}</strong> ({slot?.start}–{slot?.end}) au
-                            terminal <strong>{termLabel}</strong>.
-                        </p>
-                        <p className="mt-1">
-                            • Un e-mail et une notification seront envoyés au transporteur.
-                        </p>
-                    </div>
-
-                    {!allOk && (
-                        <Alert
-                            tone="warn"
-                            icon="triangle-alert"
-                            title="Points de contrôle incomplets"
-                        >
-                            Certains contrôles automatiques ne sont pas validés. Assurez-vous d’avoir
-                            vérifié les pièces avant de valider.
-                        </Alert>
-                    )}
-
-                    <Field label="Commentaire de décision (facultatif)" hint="Visible par le transporteur">
-                        <Textarea
-                            rows={3}
-                            value={approveComment}
-                            onChange={(e) => setApproveComment(e.target.value)}
-                            placeholder="Ex : Dossier vérifié et validé."
-                        />
-                    </Field>
-
-                    <div className="mt-2 flex justify-end gap-2">
-                        <Button
-                            variant="secondary"
-                            disabled={submitting}
-                            onClick={() => setConfirmApproveOpen(false)}
-                        >
-                            Annuler
-                        </Button>
-                        <Button
-                            variant="ok"
-                            icon="qr-code"
-                            loading={submitting}
-                            onClick={handleApprove}
-                        >
-                            Valider et émettre les QR codes
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
-
             {/* Modal de rejet */}
             <Modal
                 open={confirmRejectOpen}
@@ -619,15 +617,18 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                         <strong className="font-mono text-slate-900">{d.reference}</strong>.
                     </p>
 
-                    <Field label="Motif du rejet" required>
+                    <Field id="reject-reason" label="Motif du rejet" required>
                         <Select
+                            id="reject-reason"
                             value={rejectReason}
                             onChange={(e) => setRejectReason(e.target.value)}
-                            options={DEM_REJECT.map((motif) => ({
-                                value: motif,
-                                label: motif,
-                            }))}
-                        />
+                        >
+                            {DEM_REJECT.map((motif) => (
+                                <option key={motif} value={motif}>
+                                    {motif}
+                                </option>
+                            ))}
+                        </Select>
                     </Field>
 
                     <Field
@@ -662,6 +663,39 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 </div>
             </Modal>
 
+            {/* Modal d'aperçu d'un document */}
+            {previewDoc && (
+                <Modal
+                    open={!!previewDoc}
+                    onClose={() => setPreviewDoc(null)}
+                    title={previewDoc.label || 'Aperçu du document'}
+                    description={previewDoc.name}
+                    size="xl"
+                    bodyClassName="bg-slate-100"
+                >
+                    <div className="flex flex-col gap-4">
+                        {previewDoc.mime === 'application/pdf' ? (
+                            <iframe
+                                title={previewDoc.name}
+                                src={previewDoc.preview_url}
+                                className="h-[70vh] w-full rounded-xl border border-slate-200 bg-white"
+                            />
+                        ) : (
+                            <img
+                                src={previewDoc.preview_url}
+                                alt={previewDoc.name}
+                                className="mx-auto max-h-[70vh] max-w-full rounded-xl object-contain shadow-sm"
+                            />
+                        )}
+                        <div className="flex justify-end">
+                            <Button variant="secondary" onClick={() => setPreviewDoc(null)}>
+                                Fermer
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
             {/* Modal de consultation du Gate Pass & QR code */}
             {viewingPassRdv && (
                 <Modal
@@ -673,7 +707,6 @@ export function DemandeAdminDetail({ demande: d, now = Date.now(), onClose }) {
                 >
                     <div className="flex flex-col gap-4">
                         <GatePass rdv={viewingPassRdv} now={now} />
-                        <PassActions rdv={viewingPassRdv} />
                         <div className="mt-2 flex justify-end">
                             <Button variant="secondary" onClick={() => setViewingPassRdv(null)}>
                                 Fermer

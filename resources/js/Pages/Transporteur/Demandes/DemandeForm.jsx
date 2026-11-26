@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Link, useForm } from '@inertiajs/react';
+import { Link, useForm, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import {
     Alert,
@@ -24,6 +24,7 @@ import TruckDocuments from './TruckDocuments';
 import {
     COUNTRIES,
     DOCS,
+    getRdvDocs,
     ISO_TYPES,
     OPS,
     fmtInt,
@@ -165,8 +166,8 @@ function fromInitialSlot(initialSlot, truckMode) {
     const trucks = Array.from({ length: truckMode === 'lot' ? 2 : 1 }, () => newTruck());
 
     return {
-        op: 'IMP',
-        terminal: 'LCT',
+        op: '',
+        terminal: '',
         slot: initialSlot?.date && initialSlot?.start ? slotKey(initialSlot.date, initialSlot.start) : '',
         notes: '',
         transitaire: '',
@@ -177,6 +178,8 @@ function fromInitialSlot(initialSlot, truckMode) {
 }
 
 export default function DemandeForm({ mode = 'create', truckMode = 'single', demande = null, slots = [], terminals = [], initialSlot = null, me }) {
+    const { doc_types } = usePage().props;
+    const rdvDocs = useMemo(() => getRdvDocs(doc_types), [doc_types]);
     const isTransit = me?.acct === 'transit';
     const form = useForm(demande ? fromDemande(demande) : fromInitialSlot(initialSlot, truckMode));
     const [step, setStep] = useState(0);
@@ -239,9 +242,9 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
     const selectedTruckKey = selectedTruck ? String(selectedTruck.key) : '';
     const selectedTruckIndex = selectedTruck ? form.data.trucks.indexOf(selectedTruck) : -1;
 
-    const docsComplete = (truckKey) => DOCS.filter((doc) => form.data.docs?.[String(truckKey)]?.[doc.key]).length;
+    const docsComplete = (truckKey) => rdvDocs.filter((doc) => form.data.docs?.[String(truckKey)]?.[doc.key]).length;
     const totalDocs = form.data.trucks.reduce((sum, truck) => sum + docsComplete(truck.key), 0);
-    const expectedDocs = form.data.trucks.length * DOCS.length;
+    const expectedDocs = form.data.trucks.length * rdvDocs.length;
 
     const setTemplateTruck = (key, patch) => {
         form.setData((data) => ({
@@ -481,9 +484,19 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
 
     const goNext = () => {
         setAttempted(true);
-        if (step === 0 && !form.data.slot) {
-            form.setError('slot', 'Sélectionnez un créneau disponible.');
-            return;
+        if (step === 0) {
+            if (!form.data.op) {
+                form.setError('op', 'Sélectionnez un type d’opération.');
+                return;
+            }
+            if (!form.data.terminal) {
+                form.setError('terminal', 'Sélectionnez un terminal.');
+                return;
+            }
+            if (!form.data.slot) {
+                form.setError('slot', 'Sélectionnez un créneau disponible.');
+                return;
+            }
         }
         if (step === 1) {
             const needsContainer = form.data.op !== 'MTP';
@@ -520,13 +533,13 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
         }
         if (step === 2) {
             const incompleteIndex = form.data.trucks.findIndex((truck) => (
-                DOCS.some((doc) => !form.data.docs?.[String(truck.key)]?.[doc.key])
+                rdvDocs.some((doc) => !form.data.docs?.[String(truck.key)]?.[doc.key])
             ));
 
             if (incompleteIndex >= 0) {
                 const truck = form.data.trucks[incompleteIndex];
                 const key = String(truck.key);
-                const missing = DOCS.find((doc) => !form.data.docs?.[key]?.[doc.key]);
+                const missing = rdvDocs.find((doc) => !form.data.docs?.[key]?.[doc.key]);
 
                 form.setError(
                     `docs.${key}.${missing.key}`,
@@ -535,12 +548,16 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                 return;
             }
         }
-        if (step < 3) setStep((current) => current + 1);
+        if (step < 3) {
+            setStep((current) => current + 1);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     };
 
     const goPrevious = () => {
         setAttempted(false);
         setStep((current) => Math.max(0, current - 1));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     return (
@@ -606,459 +623,461 @@ export default function DemandeForm({ mode = 'create', truckMode = 'single', dem
                         </Badge>
                     ) : null}
                 </div>
-            {form.hasErrors ? (
-                <Alert tone="bad" title="Corrigez les erreurs du formulaire">
-                    {errors.length > 0 ? (
-                        <ul className="mt-1 list-inside list-disc text-sm">
-                            {[...new Set(errors)].slice(0, 6).map((message) => <li key={message}>{message}</li>)}
-                        </ul>
-                    ) : (
-                        <p>Certains champs sont invalides.</p>
-                    )}
-                </Alert>
-            ) : null}
-
-            <div className={cn(step === 0 ? 'block' : 'hidden')}>
-                <InertiaStepSlot
-                    form={form}
-                    slots={slots}
-                    terminals={terminals}
-                    truckCount={form.data.trucks.length}
-                    isTransit={isTransit}
-                />
-            </div>
-
-            <div className={cn(step === 0 && isTransit ? 'block' : 'hidden')}>
-            {isTransit ? (
-                <Card>
-                    <SectionTitle icon="building-2" aside={<Badge tone="brand">Compte transitaire</Badge>}>
-                        Transporteur mandaté
-                    </SectionTitle>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <Field
-                            id="transitaire"
-                            label="Votre société (transitaire)"
-                            optional
-                            className="sm:col-span-2"
-                            error={form.errors.transitaire}
-                        >
-                            <Input
-                                id="transitaire"
-                                value={form.data.transitaire}
-                                onChange={(event) => form.setData('transitaire', event.target.value)}
-                                invalid={Boolean(form.errors.transitaire)}
-                                placeholder="Nom de votre société"
-                            />
-                        </Field>
-
-                        <Field id="mandated-type" label="Type de transporteur" required error={form.errors['mandated.type']}>
-                            <Select
-                                id="mandated-type"
-                                value={form.data.mandated.type}
-                                onChange={(event) => setMandated({ type: event.target.value })}
-                                invalid={Boolean(form.errors['mandated.type'])}
-                            >
-                                <option value="entreprise">Entreprise de transport</option>
-                                <option value="particulier">Transporteur particulier</option>
-                            </Select>
-                        </Field>
-
-                        {form.data.mandated.type === 'entreprise' ? (
-                            <Field id="mandated-company" label="Entreprise mandatée" required error={form.errors['mandated.company']}>
-                                <Input
-                                    id="mandated-company"
-                                    value={form.data.mandated.company}
-                                    onChange={(event) => setMandated({ company: event.target.value })}
-                                    invalid={Boolean(form.errors['mandated.company'])}
-                                    placeholder="Ex. Trans Sahel"
-                                />
-                            </Field>
+                {form.hasErrors ? (
+                    <Alert tone="bad" title="Corrigez les erreurs du formulaire">
+                        {errors.length > 0 ? (
+                            <ul className="mt-1 list-inside list-disc text-sm">
+                                {[...new Set(errors)].slice(0, 6).map((message) => <li key={message}>{message}</li>)}
+                            </ul>
                         ) : (
-                            <>
-                                <Field id="mandated-first" label="Prénom" required error={form.errors['mandated.first']}>
-                                    <Input
-                                        id="mandated-first"
-                                        value={form.data.mandated.first}
-                                        onChange={(event) => setMandated({ first: event.target.value })}
-                                        invalid={Boolean(form.errors['mandated.first'])}
-                                    />
-                                </Field>
-                                <Field id="mandated-last" label="Nom" required error={form.errors['mandated.last']}>
-                                    <Input
-                                        id="mandated-last"
-                                        value={form.data.mandated.last}
-                                        onChange={(event) => setMandated({ last: event.target.value })}
-                                        invalid={Boolean(form.errors['mandated.last'])}
-                                    />
-                                </Field>
-                            </>
+                            <p>Certains champs sont invalides.</p>
                         )}
+                    </Alert>
+                ) : null}
 
-                        <Field
-                            id="mandated-phone"
-                            label="Téléphone du transporteur mandaté"
-                            required
-                            className="sm:col-span-2"
-                            error={form.errors['mandated.phone']}
-                            hint={form.data.mandated.phone_national
-                                ? `Format international : ${formatPhone(toE164(form.data.mandated.phone_cc, form.data.mandated.phone_national))}`
-                                : 'Saisissez le numéro sans l’indicatif pays.'}
-                        >
-                            <PhoneInput
-                                id="mandated-phone"
-                                cc={form.data.mandated.phone_cc}
-                                value={form.data.mandated.phone_national}
-                                onCc={(cc) => setMandated({ phone_cc: cc })}
-                                onChange={(value) => setMandated({ phone_national: value })}
-                                error={form.errors['mandated.phone']}
-                            />
-                        </Field>
-                    </div>
-                </Card>
-            ) : null}
-            </div>
+                <div className={cn(step === 0 ? 'block' : 'hidden')}>
+                    <InertiaStepSlot
+                        form={form}
+                        slots={slots}
+                        terminals={terminals}
+                        truckCount={form.data.trucks.length}
+                        isTransit={isTransit}
+                    />
+                </div>
 
-            <div className={cn(step === 1 ? 'block' : 'hidden')}>
-                <StepTrucks
-                    f={{ mode: truckMode, op: form.data.op, trucks: templateTrucks }}
-                    set={setTemplateForm}
-                    setTruck={setTemplateTruck}
-                    e={truckErrors}
-                />
-            </div>
-            <div className="hidden">
-            <Card>
-                <SectionTitle
-                    icon="truck"
-                    aside={(
-                        <Button
-                            size="sm"
-                            variant="secondary"
-                            icon="plus"
-                            onClick={addTruck}
-                            disabled={form.data.trucks.length >= MAX_TRUCKS || form.processing}
-                        >
-                            Ajouter un camion
-                        </Button>
-                    )}
-                >
-                    Camions ({form.data.trucks.length}/{MAX_TRUCKS})
-                </SectionTitle>
+                <div className={cn(step === 0 && isTransit ? 'block' : 'hidden')}>
+                    {isTransit ? (
+                        <Card>
+                            <SectionTitle icon="building-2" aside={<Badge tone="brand">Compte transitaire</Badge>}>
+                                Transporteur
+                            </SectionTitle>
+                            <div className="grid gap-4 sm:grid-cols-2">
+                                <Field
+                                    id="transitaire"
+                                    label="Votre société (transitaire)"
+                                    optional
+                                    className="sm:col-span-2"
+                                    error={form.errors.transitaire}
+                                >
+                                    <Input
+                                        id="transitaire"
+                                        value={form.data.transitaire}
+                                        onChange={(event) => form.setData('transitaire', event.target.value)}
+                                        invalid={Boolean(form.errors.transitaire)}
+                                        placeholder="Nom de votre société"
+                                    />
+                                </Field>
 
-                <div className="flex flex-col gap-4">
-                    {form.data.trucks.map((truck, index) => {
-                        const container = parseContainer(truck.container.number);
-                        const bl = parseBL(truck.container.bl);
-                        const err = (path) => form.errors[path];
+                                <Field id="mandated-type" label="Type de transporteur" required error={form.errors['mandated.type']}>
+                                    <Select
+                                        id="mandated-type"
+                                        value={form.data.mandated.type}
+                                        onChange={(event) => setMandated({ type: event.target.value })}
+                                        invalid={Boolean(form.errors['mandated.type'])}
+                                    >
+                                        <option value="entreprise">Entreprise de transport</option>
+                                        <option value="particulier">Transporteur particulier</option>
+                                    </Select>
+                                </Field>
 
-                        return (
-                            <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5">
-                                <div className="mb-4 flex items-center justify-between gap-3">
-                                    <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-                                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
-                                        Camion {index + 1}
-                                    </h3>
-                                    {form.data.trucks.length > 1 ? (
-                                        <IconButton
-                                            icon="trash-2"
-                                            label={`Retirer le camion ${index + 1}`}
-                                            variant="danger"
-                                            onClick={() => removeTruck(index)}
-                                            disabled={form.processing}
+                                {form.data.mandated.type === 'entreprise' ? (
+                                    <Field id="mandated-company" label="Entreprise mandatée" required error={form.errors['mandated.company']}>
+                                        <Input
+                                            id="mandated-company"
+                                            value={form.data.mandated.company}
+                                            onChange={(event) => setMandated({ company: event.target.value })}
+                                            invalid={Boolean(form.errors['mandated.company'])}
+                                            placeholder="Ex. Trans Sahel"
                                         />
-                                    ) : null}
-                                </div>
-
-                                <div className="grid gap-5">
-                                    <div>
-                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Chauffeur</p>
-                                        <div className="grid gap-3 sm:grid-cols-2">
-                                            <Field id={`driver-first-${index}`} label="Prénom" required error={err(`trucks.${index}.driver.first`)}>
-                                                <Input
-                                                    id={`driver-first-${index}`}
-                                                    value={truck.driver.first}
-                                                    onChange={(event) => setTruckValue(index, 'driver', 'first', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.driver.first`))}
-                                                    autoComplete="given-name"
-                                                />
-                                            </Field>
-                                            <Field id={`driver-last-${index}`} label="Nom" required error={err(`trucks.${index}.driver.last`)}>
-                                                <Input
-                                                    id={`driver-last-${index}`}
-                                                    value={truck.driver.last}
-                                                    onChange={(event) => setTruckValue(index, 'driver', 'last', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.driver.last`))}
-                                                    autoComplete="family-name"
-                                                />
-                                            </Field>
-                                            <Field
-                                                id={`driver-phone-${index}`}
-                                                label="Téléphone"
-                                                required
-                                                error={err(`trucks.${index}.driver.phone`)}
-                                                hint={truck.driver.phone_national
-                                                    ? `Format international : ${formatPhone(toE164(truck.driver.phone_cc, truck.driver.phone_national))}`
-                                                    : 'Saisissez le numéro sans l’indicatif pays.'}
-                                            >
-                                                <PhoneInput
-                                                    id={`driver-phone-${index}`}
-                                                    cc={truck.driver.phone_cc}
-                                                    value={truck.driver.phone_national}
-                                                    onCc={(cc) => setTruckValue(index, 'driver', 'phone_cc', cc)}
-                                                    onChange={(value) => setTruckValue(index, 'driver', 'phone_national', value)}
-                                                    error={err(`trucks.${index}.driver.phone`)}
-                                                />
-                                            </Field>
-                                            <Field id={`driver-license-${index}`} label="N° de permis" required error={err(`trucks.${index}.driver.license`)}>
-                                                <Input
-                                                    id={`driver-license-${index}`}
-                                                    value={truck.driver.license}
-                                                    onChange={(event) => setTruckValue(index, 'driver', 'license', event.target.value.toUpperCase())}
-                                                    invalid={Boolean(err(`trucks.${index}.driver.license`))}
-                                                    mono
-                                                    maxLength={24}
-                                                    placeholder="Ex. TG-123456"
-                                                />
-                                            </Field>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Véhicule</p>
-                                        <div className="grid gap-3 sm:grid-cols-3">
-                                            <Field id={`vehicle-country-${index}`} label="Pays" required error={err(`trucks.${index}.vehicle.country`)}>
-                                                <Select
-                                                    id={`vehicle-country-${index}`}
-                                                    value={truck.vehicle.country}
-                                                    onChange={(event) => setTruckValue(index, 'vehicle', 'country', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.vehicle.country`))}
-                                                >
-                                                    {COUNTRIES.map((country) => (
-                                                        <option key={country.code} value={country.code}>{country.name} ({country.code})</option>
-                                                    ))}
-                                                </Select>
-                                            </Field>
-                                            <Field id={`vehicle-tractor-${index}`} label="Immatriculation tracteur" required error={err(`trucks.${index}.vehicle.tractor`)}>
-                                                <Input
-                                                    id={`vehicle-tractor-${index}`}
-                                                    value={truck.vehicle.tractor}
-                                                    onChange={(event) => setTruckValue(index, 'vehicle', 'tractor', normalizePlate(event.target.value))}
-                                                    invalid={Boolean(err(`trucks.${index}.vehicle.tractor`))}
-                                                    mono
-                                                    maxLength={14}
-                                                    placeholder="Ex. TG 1234 AB"
-                                                />
-                                            </Field>
-                                            <Field id={`vehicle-trailer-${index}`} label="Immatriculation remorque" optional error={err(`trucks.${index}.vehicle.trailer`)}>
-                                                <Input
-                                                    id={`vehicle-trailer-${index}`}
-                                                    value={truck.vehicle.trailer}
-                                                    onChange={(event) => setTruckValue(index, 'vehicle', 'trailer', normalizePlate(event.target.value))}
-                                                    invalid={Boolean(err(`trucks.${index}.vehicle.trailer`))}
-                                                    mono
-                                                    maxLength={14}
-                                                    placeholder="Ex. TG 5678 CD"
-                                                />
-                                            </Field>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Conteneur</p>
-                                        <div className="grid gap-3 sm:grid-cols-2">
-                                            <Field
-                                                id={`container-number-${index}`}
-                                                label="N° de conteneur"
-                                                required={form.data.op !== 'MTP'}
-                                                optional={form.data.op === 'MTP'}
-                                                error={err(`trucks.${index}.container.number`)}
-                                                hint={container.raw
-                                                    ? container.message
-                                                    : form.data.op === 'MTP'
-                                                        ? 'Laissez vide pour un retrait de conteneur vide.'
-                                                        : 'Format ISO 6346 : 4 lettres + 7 chiffres.'}
-                                                hintTone={container.valid ? 'ok' : undefined}
-                                            >
-                                                <Input
-                                                    id={`container-number-${index}`}
-                                                    value={truck.container.number}
-                                                    onChange={(event) => setTruckValue(index, 'container', 'number', event.target.value.toUpperCase())}
-                                                    invalid={Boolean(err(`trucks.${index}.container.number`))}
-                                                    mono
-                                                    maxLength={11}
-                                                    placeholder="MSCU4829130"
-                                                />
-                                            </Field>
-                                            <Field id={`container-iso-${index}`} label="Type ISO" required error={err(`trucks.${index}.container.iso`)}>
-                                                <Select
-                                                    id={`container-iso-${index}`}
-                                                    value={truck.container.iso}
-                                                    onChange={(event) => setTruckValue(index, 'container', 'iso', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.container.iso`))}
-                                                >
-                                                    {ISO_TYPES.map((type) => (
-                                                        <option key={type.code} value={type.code}>{type.code} · {type.label}</option>
-                                                    ))}
-                                                </Select>
-                                            </Field>
-                                            <Field
-                                                id={`container-bl-${index}`}
-                                                label="N° de connaissement (B/L)"
-                                                required={needsBlAndGoods}
-                                                optional={!needsBlAndGoods}
-                                                error={err(`trucks.${index}.container.bl`)}
-                                                hint={bl.raw ? bl.message : '6 à 20 lettres ou chiffres.'}
-                                                hintTone={bl.valid && bl.carrier ? 'ok' : undefined}
-                                            >
-                                                <Input
-                                                    id={`container-bl-${index}`}
-                                                    value={truck.container.bl}
-                                                    onChange={(event) => setTruckValue(index, 'container', 'bl', event.target.value.toUpperCase())}
-                                                    invalid={Boolean(err(`trucks.${index}.container.bl`))}
-                                                    mono
-                                                    maxLength={20}
-                                                    placeholder="MEDU123456"
-                                                />
-                                            </Field>
-                                            <Field
-                                                id={`container-goods-${index}`}
-                                                label="Marchandise"
-                                                required={needsBlAndGoods}
-                                                optional={!needsBlAndGoods}
-                                                error={err(`trucks.${index}.container.goods`)}
-                                            >
-                                                <Input
-                                                    id={`container-goods-${index}`}
-                                                    value={truck.container.goods}
-                                                    onChange={(event) => setTruckValue(index, 'container', 'goods', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.container.goods`))}
-                                                    maxLength={255}
-                                                    placeholder="Ex. riz en sacs"
-                                                />
-                                            </Field>
-                                            <Field
-                                                id={`container-vgm-${index}`}
-                                                label="VGM (poids brut vérifié)"
-                                                optional
-                                                error={err(`trucks.${index}.container.vgm`)}
-                                                hint="En kilogrammes, entre 1 000 et 45 000. Requis pour un export."
-                                            >
-                                                <Input
-                                                    id={`container-vgm-${index}`}
-                                                    type="number"
-                                                    inputMode="numeric"
-                                                    min={1000}
-                                                    max={45000}
-                                                    step={1}
-                                                    value={truck.container.vgm}
-                                                    onChange={(event) => setTruckValue(index, 'container', 'vgm', event.target.value)}
-                                                    invalid={Boolean(err(`trucks.${index}.container.vgm`))}
-                                                    placeholder="Ex. 24500"
-                                                />
-                                            </Field>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </Card>
-            </div>
-
-            <div className={cn(step === 2 ? 'block' : 'hidden')}>
-            <Card>
-                <SectionTitle
-                    icon="file-up"
-                    aside={<Badge tone={totalDocs === expectedDocs ? 'ok' : 'neutral'}>{totalDocs}/{expectedDocs}</Badge>}
-                >
-                    Documents obligatoires par camion
-                </SectionTitle>
-                <p className="-mt-2 mb-4 text-sm text-slate-500">
-                    Sélectionnez un camion pour déposer ses 6 pièces. Formats acceptés : PDF, JPG, PNG ou WebP · 10 Mo maximum par fichier.
-                </p>
-
-                <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Camions">
-                    {form.data.trucks.map((truck, index) => {
-                        const key = String(truck.key);
-                        const active = key === selectedTruckKey;
-                        const complete = docsComplete(key);
-
-                        return (
-                            <button
-                                key={key}
-                                type="button"
-                                role="tab"
-                                aria-selected={active}
-                                onClick={() => setActiveTruckKey(key)}
-                                className={cn(
-                                    'flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-                                    active
-                                        ? 'border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-200'
-                                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                                    </Field>
+                                ) : (
+                                    <>
+                                        <Field id="mandated-first" label="Prénom" required error={form.errors['mandated.first']}>
+                                            <Input
+                                                id="mandated-first"
+                                                value={form.data.mandated.first}
+                                                onChange={(event) => setMandated({ first: event.target.value })}
+                                                invalid={Boolean(form.errors['mandated.first'])}
+                                            />
+                                        </Field>
+                                        <Field id="mandated-last" label="Nom" required error={form.errors['mandated.last']}>
+                                            <Input
+                                                id="mandated-last"
+                                                value={form.data.mandated.last}
+                                                onChange={(event) => setMandated({ last: event.target.value })}
+                                                invalid={Boolean(form.errors['mandated.last'])}
+                                            />
+                                        </Field>
+                                    </>
                                 )}
-                            >
-                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
-                                    {index + 1}
-                                </span>
-                                <span className="font-medium">Camion {index + 1}</span>
-                                {truck.vehicle?.tractor ? (
-                                    <span className="font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
-                                ) : null}
-                                <Badge tone={complete === DOCS.length ? 'ok' : 'neutral'}>{complete}/{DOCS.length}</Badge>
-                            </button>
-                        );
-                    })}
+
+                                <Field
+                                    id="mandated-phone"
+                                    label="Téléphone du transporteur mandaté"
+                                    required
+                                    className="sm:col-span-2"
+                                    error={form.errors['mandated.phone']}
+                                    hint={form.data.mandated.phone_national
+                                        ? `Format international : ${formatPhone(toE164(form.data.mandated.phone_cc, form.data.mandated.phone_national))}`
+                                        : 'Saisissez le numéro sans l’indicatif pays.'}
+                                >
+                                    <PhoneInput
+                                        id="mandated-phone"
+                                        cc={form.data.mandated.phone_cc}
+                                        value={form.data.mandated.phone_national}
+                                        onCc={(cc) => setMandated({ phone_cc: cc })}
+                                        onChange={(value) => setMandated({ phone_national: value })}
+                                        error={form.errors['mandated.phone']}
+                                    />
+                                </Field>
+                            </div>
+                        </Card>
+                    ) : null}
                 </div>
 
-                {selectedTruck ? (
-                    <TruckDocuments
-                        truck={selectedTruck}
-                        index={selectedTruckIndex}
-                        truckKey={selectedTruckKey}
-                        docs={form.data.docs?.[selectedTruckKey] || {}}
+                <div className={cn(step === 1 ? 'block' : 'hidden')}>
+                    <StepTrucks
+                        f={{ mode: truckMode, op: form.data.op, trucks: templateTrucks }}
+                        set={setTemplateForm}
+                        setTruck={setTemplateTruck}
+                        e={truckErrors}
+                    />
+                </div>
+                <div className="hidden">
+                    <Card>
+                        <SectionTitle
+                            icon="truck"
+                            aside={(
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    icon="plus"
+                                    onClick={addTruck}
+                                    disabled={form.data.trucks.length >= MAX_TRUCKS || form.processing}
+                                >
+                                    Ajouter un camion
+                                </Button>
+                            )}
+                        >
+                            Camions ({form.data.trucks.length}/{MAX_TRUCKS})
+                        </SectionTitle>
+
+                        <div className="flex flex-col gap-4">
+                            {form.data.trucks.map((truck, index) => {
+                                const container = parseContainer(truck.container.number);
+                                const bl = parseBL(truck.container.bl);
+                                const err = (path) => form.errors[path];
+
+                                return (
+                                    <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/40 p-4 sm:p-5">
+                                        <div className="mb-4 flex items-center justify-between gap-3">
+                                            <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">{index + 1}</span>
+                                                Camion {index + 1}
+                                            </h3>
+                                            {form.data.trucks.length > 1 ? (
+                                                <IconButton
+                                                    icon="trash-2"
+                                                    label={`Retirer le camion ${index + 1}`}
+                                                    variant="danger"
+                                                    onClick={() => removeTruck(index)}
+                                                    disabled={form.processing}
+                                                />
+                                            ) : null}
+                                        </div>
+
+                                        <div className="grid gap-5">
+                                            <div>
+                                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Chauffeur</p>
+                                                <div className="grid gap-3 sm:grid-cols-2">
+                                                    <Field id={`driver-first-${index}`} label="Prénom" required error={err(`trucks.${index}.driver.first`)}>
+                                                        <Input
+                                                            id={`driver-first-${index}`}
+                                                            value={truck.driver.first}
+                                                            onChange={(event) => setTruckValue(index, 'driver', 'first', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.driver.first`))}
+                                                            autoComplete="given-name"
+                                                        />
+                                                    </Field>
+                                                    <Field id={`driver-last-${index}`} label="Nom" required error={err(`trucks.${index}.driver.last`)}>
+                                                        <Input
+                                                            id={`driver-last-${index}`}
+                                                            value={truck.driver.last}
+                                                            onChange={(event) => setTruckValue(index, 'driver', 'last', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.driver.last`))}
+                                                            autoComplete="family-name"
+                                                        />
+                                                    </Field>
+                                                    <Field
+                                                        id={`driver-phone-${index}`}
+                                                        label="Téléphone"
+                                                        required
+                                                        error={err(`trucks.${index}.driver.phone`)}
+                                                        hint={truck.driver.phone_national
+                                                            ? `Format international : ${formatPhone(toE164(truck.driver.phone_cc, truck.driver.phone_national))}`
+                                                            : 'Saisissez le numéro sans l’indicatif pays.'}
+                                                    >
+                                                        <PhoneInput
+                                                            id={`driver-phone-${index}`}
+                                                            cc={truck.driver.phone_cc}
+                                                            value={truck.driver.phone_national}
+                                                            onCc={(cc) => setTruckValue(index, 'driver', 'phone_cc', cc)}
+                                                            onChange={(value) => setTruckValue(index, 'driver', 'phone_national', value)}
+                                                            error={err(`trucks.${index}.driver.phone`)}
+                                                        />
+                                                    </Field>
+                                                    <Field id={`driver-license-${index}`} label="N° de permis" required error={err(`trucks.${index}.driver.license`)}>
+                                                        <Input
+                                                            id={`driver-license-${index}`}
+                                                            value={truck.driver.license}
+                                                            onChange={(event) => setTruckValue(index, 'driver', 'license', event.target.value.toUpperCase())}
+                                                            invalid={Boolean(err(`trucks.${index}.driver.license`))}
+                                                            mono
+                                                            maxLength={24}
+                                                            placeholder="Ex. TG-123456"
+                                                        />
+                                                    </Field>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Véhicule</p>
+                                                <div className="grid gap-3 sm:grid-cols-3">
+                                                    <Field id={`vehicle-country-${index}`} label="Pays" required error={err(`trucks.${index}.vehicle.country`)}>
+                                                        <Select
+                                                            id={`vehicle-country-${index}`}
+                                                            value={truck.vehicle.country}
+                                                            onChange={(event) => setTruckValue(index, 'vehicle', 'country', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.vehicle.country`))}
+                                                        >
+                                                            {COUNTRIES.map((country) => (
+                                                                <option key={country.code} value={country.code}>{country.name} ({country.code})</option>
+                                                            ))}
+                                                        </Select>
+                                                    </Field>
+                                                    <Field id={`vehicle-tractor-${index}`} label="Immatriculation tracteur" required error={err(`trucks.${index}.vehicle.tractor`)}>
+                                                        <Input
+                                                            id={`vehicle-tractor-${index}`}
+                                                            value={truck.vehicle.tractor}
+                                                            onChange={(event) => setTruckValue(index, 'vehicle', 'tractor', normalizePlate(event.target.value))}
+                                                            invalid={Boolean(err(`trucks.${index}.vehicle.tractor`))}
+                                                            mono
+                                                            maxLength={14}
+                                                            placeholder="Ex. TG 1234 AB"
+                                                        />
+                                                    </Field>
+                                                    <Field id={`vehicle-trailer-${index}`} label="Immatriculation remorque" optional error={err(`trucks.${index}.vehicle.trailer`)}>
+                                                        <Input
+                                                            id={`vehicle-trailer-${index}`}
+                                                            value={truck.vehicle.trailer}
+                                                            onChange={(event) => setTruckValue(index, 'vehicle', 'trailer', normalizePlate(event.target.value))}
+                                                            invalid={Boolean(err(`trucks.${index}.vehicle.trailer`))}
+                                                            mono
+                                                            maxLength={14}
+                                                            placeholder="Ex. TG 5678 CD"
+                                                        />
+                                                    </Field>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Conteneur</p>
+                                                <div className="grid gap-3 sm:grid-cols-2">
+                                                    <Field
+                                                        id={`container-number-${index}`}
+                                                        label="N° de conteneur"
+                                                        required={form.data.op !== 'MTP'}
+                                                        optional={form.data.op === 'MTP'}
+                                                        error={err(`trucks.${index}.container.number`)}
+                                                        hint={container.raw
+                                                            ? container.message
+                                                            : form.data.op === 'MTP'
+                                                                ? 'Laissez vide pour un retrait de conteneur vide.'
+                                                                : 'Format ISO 6346 : 4 lettres + 7 chiffres.'}
+                                                        hintTone={container.valid ? 'ok' : undefined}
+                                                    >
+                                                        <Input
+                                                            id={`container-number-${index}`}
+                                                            value={truck.container.number}
+                                                            onChange={(event) => setTruckValue(index, 'container', 'number', event.target.value.toUpperCase())}
+                                                            invalid={Boolean(err(`trucks.${index}.container.number`))}
+                                                            mono
+                                                            maxLength={11}
+                                                            placeholder="MSCU4829130"
+                                                        />
+                                                    </Field>
+                                                    <Field id={`container-iso-${index}`} label="Type ISO" required error={err(`trucks.${index}.container.iso`)}>
+                                                        <Select
+                                                            id={`container-iso-${index}`}
+                                                            value={truck.container.iso}
+                                                            onChange={(event) => setTruckValue(index, 'container', 'iso', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.container.iso`))}
+                                                        >
+                                                            {ISO_TYPES.map((type) => (
+                                                                <option key={type.code} value={type.code}>{type.code} · {type.label}</option>
+                                                            ))}
+                                                        </Select>
+                                                    </Field>
+                                                    <Field
+                                                        id={`container-bl-${index}`}
+                                                        label="N° de connaissement (B/L)"
+                                                        required={needsBlAndGoods}
+                                                        optional={!needsBlAndGoods}
+                                                        error={err(`trucks.${index}.container.bl`)}
+                                                        hint={bl.raw ? bl.message : '6 à 20 lettres ou chiffres.'}
+                                                        hintTone={bl.valid && bl.carrier ? 'ok' : undefined}
+                                                    >
+                                                        <Input
+                                                            id={`container-bl-${index}`}
+                                                            value={truck.container.bl}
+                                                            onChange={(event) => setTruckValue(index, 'container', 'bl', event.target.value.toUpperCase())}
+                                                            invalid={Boolean(err(`trucks.${index}.container.bl`))}
+                                                            mono
+                                                            maxLength={20}
+                                                            placeholder="MEDU123456"
+                                                        />
+                                                    </Field>
+                                                    <Field
+                                                        id={`container-goods-${index}`}
+                                                        label="Marchandise"
+                                                        required={needsBlAndGoods}
+                                                        optional={!needsBlAndGoods}
+                                                        error={err(`trucks.${index}.container.goods`)}
+                                                    >
+                                                        <Input
+                                                            id={`container-goods-${index}`}
+                                                            value={truck.container.goods}
+                                                            onChange={(event) => setTruckValue(index, 'container', 'goods', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.container.goods`))}
+                                                            maxLength={255}
+                                                            placeholder="Ex. riz en sacs"
+                                                        />
+                                                    </Field>
+                                                    <Field
+                                                        id={`container-vgm-${index}`}
+                                                        label="VGM (poids brut vérifié)"
+                                                        optional
+                                                        error={err(`trucks.${index}.container.vgm`)}
+                                                        hint="En kilogrammes, entre 1 000 et 45 000. Requis pour un export."
+                                                    >
+                                                        <Input
+                                                            id={`container-vgm-${index}`}
+                                                            type="number"
+                                                            inputMode="numeric"
+                                                            min={1000}
+                                                            max={45000}
+                                                            step={1}
+                                                            value={truck.container.vgm}
+                                                            onChange={(event) => setTruckValue(index, 'container', 'vgm', event.target.value)}
+                                                            invalid={Boolean(err(`trucks.${index}.container.vgm`))}
+                                                            placeholder="Ex. 24500"
+                                                        />
+                                                    </Field>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Card>
+                </div>
+
+                <div className={cn(step === 2 ? 'block' : 'hidden')}>
+                    <Card>
+                        <SectionTitle
+                            icon="file-up"
+                            aside={<Badge tone={totalDocs === expectedDocs ? 'ok' : 'neutral'}>{totalDocs}/{expectedDocs}</Badge>}
+                        >
+                            Documents obligatoires par camion
+                        </SectionTitle>
+                        <p className="-mt-2 mb-4 text-sm text-slate-500">
+                            Sélectionnez un camion pour déposer ses 6 pièces. Formats acceptés : PDF, JPG, PNG ou WebP · 10 Mo maximum par fichier.
+                        </p>
+
+                        <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Camions">
+                            {form.data.trucks.map((truck, index) => {
+                                const key = String(truck.key);
+                                const active = key === selectedTruckKey;
+                                const complete = docsComplete(key);
+
+                                return (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        role="tab"
+                                        aria-selected={active}
+                                        onClick={() => setActiveTruckKey(key)}
+                                        className={cn(
+                                            'flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+                                            active
+                                                ? 'border-brand-500 bg-brand-50 text-brand-800 ring-1 ring-brand-200'
+                                                : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                                        )}
+                                    >
+                                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white">
+                                            {index + 1}
+                                        </span>
+                                        <span className="font-medium">Camion {index + 1}</span>
+                                        {truck.vehicle?.tractor ? (
+                                            <span className="font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
+                                        ) : null}
+                                        <Badge tone={complete === rdvDocs.length ? 'ok' : 'neutral'}>{complete}/{rdvDocs.length}</Badge>
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {selectedTruck ? (
+                            <TruckDocuments
+                                truck={selectedTruck}
+                                index={selectedTruckIndex}
+                                truckKey={selectedTruckKey}
+                                docs={form.data.docs?.[selectedTruckKey] || {}}
+                                uploaded={uploaded}
+                                uploading={uploading}
+                                uploadErrors={uploadErrors}
+                                errors={form.errors}
+                                fileInputs={fileInputs}
+                                docTypes={rdvDocs}
+                                onUpload={(type, file) => upload(selectedTruckKey, type, file)}
+                                onRemove={(type) => removeUpload(selectedTruckKey, type)}
+                            />
+                        ) : null}
+                    </Card>
+                </div>
+
+                {step === 3 ? (
+                    <DemandeReview
+                        data={form.data}
+                        selectedSlot={selectedSlot}
+                        isTransit={isTransit}
                         uploaded={uploaded}
-                        uploading={uploading}
-                        uploadErrors={uploadErrors}
-                        errors={form.errors}
-                        fileInputs={fileInputs}
-                        onUpload={(type, file) => upload(selectedTruckKey, type, file)}
-                        onRemove={(type) => removeUpload(selectedTruckKey, type)}
+                        docTypes={rdvDocs}
+                        onEdit={setStep}
                     />
                 ) : null}
-            </Card>
-            </div>
 
-            {step === 3 ? (
-                <DemandeReview
-                    data={form.data}
-                    selectedSlot={selectedSlot}
-                    isTransit={isTransit}
-                    uploaded={uploaded}
-                    onEdit={setStep}
-                />
-            ) : null}
-
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-sm text-slate-500">
-                    {uploadingAny
-                        ? 'Attendez la fin des téléversements avant d’envoyer.'
-                        : `${fmtInt(form.data.trucks.length)} camion${form.data.trucks.length > 1 ? 's' : ''} · ${totalDocs}/${expectedDocs} documents`}
-                </p>
-                <div className="flex flex-wrap items-center gap-2">
-                    <Link href={route('transporteur.demandes.index')} className={buttonClass({ variant: 'secondary' })}>
-                        Annuler
-                    </Link>
-                    {step > 0 ? <Button type="button" variant="secondary" icon="arrow-left" onClick={goPrevious}>Précédent</Button> : null}
-                    {step < 3 ? (
-                        <Button type="button" icon="arrow-right" iconRight onClick={goNext}>Continuer</Button>
-                    ) : (
-                        <Button type="button" icon={mode === 'edit' ? 'check' : 'send'} loading={form.processing} disabled={uploadingAny} onClick={submit}>
-                            {mode === 'edit' ? 'Enregistrer les modifications' : 'Envoyer la demande'}
-                        </Button>
-                    )}
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm text-slate-500">
+                        {uploadingAny
+                            ? 'Attendez la fin des téléversements avant d’envoyer.'
+                            : `${fmtInt(form.data.trucks.length)} camion${form.data.trucks.length > 1 ? 's' : ''} · ${totalDocs}/${expectedDocs} documents`}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Link href={route('transporteur.demandes.index')} className={buttonClass({ variant: 'secondary' })}>
+                            Annuler
+                        </Link>
+                        {step > 0 ? <Button type="button" variant="secondary" icon="arrow-left" onClick={goPrevious}>Précédent</Button> : null}
+                        {step < 3 ? (
+                            <Button type="button" icon="arrow-right" iconRight onClick={goNext}>Continuer</Button>
+                        ) : (
+                            <Button type="button" icon={mode === 'edit' ? 'check' : 'send'} loading={form.processing} disabled={uploadingAny} onClick={submit}>
+                                {mode === 'edit' ? 'Enregistrer les modifications' : 'Envoyer la demande'}
+                            </Button>
+                        )}
+                    </div>
                 </div>
-            </div>
             </div>
         </form>
     );

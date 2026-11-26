@@ -156,6 +156,81 @@ class DemandeRdvService
         return $demande;
     }
 
+    public function validateDocument(DemandeDocument $document, User $admin): DemandeDocument
+    {
+        $demande = $document->demande;
+        if (! $demande || (! $demande->isPending() && ! $demande->isApproved())) {
+            throw ValidationException::withMessages([
+                'document' => 'La validation d’un document nécessite que la demande soit en attente ou déjà validée.',
+            ]);
+        }
+
+        DB::transaction(function () use ($document, $demande, $admin) {
+            $document->update([
+                'statut' => DemandeDocument::STATUT_VALIDE,
+                'validated_at' => now(),
+                'validated_by' => $admin->id,
+            ]);
+
+            $docLabel = $document->typeLabel();
+            $detail = $document->camion
+                ? "{$docLabel} (Camion {$document->camion->position}) validé"
+                : "{$docLabel} validé";
+
+            $this->record(
+                $demande,
+                'document_valide',
+                $admin,
+                $detail
+            );
+
+            // Vérifier si tous les documents de la demande sont validés
+            $allDocuments = $demande->documents()->get();
+            $hasUnvalidated = $allDocuments->contains(fn (DemandeDocument $doc) => ! $doc->isValidated());
+
+            if (! $hasUnvalidated && $demande->isPending()) {
+                // Déclencher l'approbation automatique de la demande
+                $lockedDemande = DemandeRdv::query()->whereKey($demande->id)->lockForUpdate()->firstOrFail();
+                $creneau = Creneau::query()->whereKey($lockedDemande->creneau_id)->lockForUpdate()->firstOrFail();
+
+                if (! $creneau->open || SlotTime::isPast($creneau)) {
+                    throw ValidationException::withMessages([
+                        'document' => 'Le créneau de cette demande est fermé ou déjà passé.',
+                    ]);
+                }
+
+                $usage = $this->usage->forCreneau($creneau, $lockedDemande->id);
+                $trucks = $lockedDemande->camions()->count();
+
+                if ($usage['remaining'] < $trucks) {
+                    throw ValidationException::withMessages([
+                        'document' => 'La capacité restante du créneau ne permet plus de valider cette demande.',
+                    ]);
+                }
+
+                $lockedDemande->update([
+                    'status' => DemandeRdv::STATUS_APPROVED,
+                    'decided_at' => now(),
+                    'decided_by' => $admin->id,
+                    'decision_comment' => 'Validation automatique suite à la conformité de l’ensemble des documents.',
+                    'rejection_reason' => null,
+                ]);
+
+                $this->record(
+                    $lockedDemande,
+                    'validee',
+                    $admin,
+                    'Validation complète automatique suite à la conformité de l’ensemble des pièces justificatives.'
+                );
+
+                $lockedDemande->load(['user', 'creneau']);
+                $lockedDemande->user?->notify(new DemandeRdvDecided($lockedDemande, true));
+            }
+        }, 3);
+
+        return $document->fresh();
+    }
+
     public function reject(DemandeRdv $demande, User $admin, string $reason, ?string $comment = null): DemandeRdv
     {
         $demande = DB::transaction(function () use ($demande, $admin, $reason, $comment) {
@@ -423,6 +498,10 @@ class DemandeRdvService
         }
 
         $keep = [];
+        $piecesMap = PieceAFournir::query()
+            ->whereIn('code', DemandeRdv::DOC_TYPES)
+            ->get()
+            ->keyBy('code');
 
         foreach ($resolved as $item) {
             if ($item['kind'] === 'existing') {
@@ -450,8 +529,11 @@ class DemandeRdvService
                 $old->delete();
             }
 
+            $pieceAFournir = $piecesMap->get($type);
+
             $document = $demande->documents()->create([
                 'demande_camion_id' => $item['camion_id'],
+                'piece_a_fournir_id' => $pieceAFournir?->id,
                 'type' => $type,
                 'original_name' => $upload->original_name,
                 'path' => $path,

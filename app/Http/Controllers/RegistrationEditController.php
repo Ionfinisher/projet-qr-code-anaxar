@@ -38,7 +38,7 @@ class RegistrationEditController extends Controller
 
         $pieces = PieceAFournir::query()
             ->active()
-            ->pourType($type)
+            ->inscription($type)
             ->orderBy('libelle')
             ->get();
 
@@ -146,7 +146,7 @@ class RegistrationEditController extends Controller
 
         $pieces = PieceAFournir::query()
             ->active()
-            ->pourType($type)
+            ->inscription($type)
             ->orderBy('libelle')
             ->get();
 
