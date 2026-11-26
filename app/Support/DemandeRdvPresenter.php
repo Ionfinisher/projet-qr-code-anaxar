@@ -235,6 +235,8 @@ final class DemandeRdvPresenter
         $rdvId = $demande ? 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6)) : null;
         $canEmitToken = $demande && $demande->isApproved() && $demande->hasAllDocumentsValidated();
         $token = $canEmitToken ? self::generateToken($demande, $camion) : null;
+        $rdvId = $demande ? RdvId::for($camion, $demande) : null;
+        $token = ($demande && $demande->isApproved()) ? self::generateToken($demande, $camion) : null;
 
         return [
             'id' => $camion->id,
@@ -339,7 +341,7 @@ final class DemandeRdvPresenter
 
     public static function generateToken(DemandeRdv $demande, DemandeCamion $camion): string
     {
-        $rdvId = 'PF-' . strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6));
+        $rdvId = 'PF-'.strtoupper(substr(md5("{$demande->reference}-{$camion->id}-{$camion->position}"), 0, 6));
         $slot = $demande->creneau;
         $slotDate = $slot?->date ? $slot->date->format('Y-m-d') : now()->format('Y-m-d');
         $slotStart = $slot?->start ?? '08:00';
@@ -357,7 +359,7 @@ final class DemandeRdvPresenter
         $company = $demande->mandated_company ?: ($demande->user?->raisonsociale ?: $demande->user?->name ?: 'Transporteur');
         $driver = trim("{$camion->driver_first} {$camion->driver_last}");
         $veh = "{$camion->vehicle_country}|{$camion->vehicle_tractor}|{$camion->vehicle_trailer}";
-        $slt = str_replace('-', '', $slotDate) . str_replace(':', '', $slotStart) . '-' . str_replace(':', '', $slotEnd);
+        $slt = str_replace('-', '', $slotDate).str_replace(':', '', $slotStart).'-'.str_replace(':', '', $slotEnd);
 
         $docHashes = [];
         $camionDocuments = $camion->relationLoaded('documents') ? $camion->documents : $camion->documents()->get();

@@ -24,6 +24,9 @@ class DemandeDocument extends Model
         'BL' => 'Connaissement',
         'CG' => 'Carte grise',
     ];
+    public const CHECK_PASSE = 'passe';
+
+    public const CHECK_REFUSE = 'refuse';
 
     protected $fillable = [
         'demande_rdv_id',
@@ -38,11 +41,18 @@ class DemandeDocument extends Model
         'statut',
         'validated_at',
         'validated_by',
+        'check_result',
+        'checked_at',
+        'checked_by',
+        'check_note',
     ];
 
     protected $casts = [
         'size' => 'integer',
         'validated_at' => 'datetime',
+        'demande_rdv_id' => 'integer',
+        'demande_camion_id' => 'integer',
+        'checked_at' => 'datetime',
     ];
 
     public function demande(): BelongsTo
@@ -89,5 +99,8 @@ class DemandeDocument extends Model
         }
 
         return self::TYPE_LABELS[$this->type] ?? strtoupper($this->type);
+    public function checker(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'checked_by');
     }
 }

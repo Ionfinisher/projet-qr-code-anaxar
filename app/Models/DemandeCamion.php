@@ -26,6 +26,7 @@ class DemandeCamion extends Model
         'container_bl',
         'container_goods',
         'container_vgm',
+        'rdv_hash',
     ];
 
     protected $casts = [

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
@@ -31,6 +32,17 @@ class RouteServiceProvider extends ServiceProvider
         // Autocomplete des villes : endpoint public, donc plafond serré par IP.
         RateLimiter::for('places', function (Request $request) {
             return Limit::perMinute(30)->by($request->ip());
+        });
+
+        // Scan mobile : 30 lectures/minute par utilisateur authentifié.
+        RateLimiter::for('mobile-scan', function (Request $request) {
+            return Limit::perMinute(30)
+                ->by((int) $request->user()?->id)
+                ->response(fn (Request $request, array $headers): JsonResponse => response()->json(
+                    ['message' => 'Trop de requêtes. Réessayez plus tard.'],
+                    429,
+                    $headers
+                ));
         });
 
         $this->routes(function () {

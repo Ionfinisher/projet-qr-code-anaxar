@@ -8,6 +8,25 @@ projet adhère au [versionnement sémantique](https://semver.org/lang/fr/).
 
 ### Added
 
+- API mobile sous `/api/v1` : login Sanctum (token `mobile` 12 h, capacité
+  `mobile.access`), scan d'un QR signé retournant le dossier complet en lecture
+  seule, et logout révoquant le token courant.
+- Scan mobile : paramètre optionnel `poste` (numéro 1-6 ou clé `bc`/`bf`/`as`/
+  `vt`/`gp`/`ta`, insensible à la casse) pour ne retourner que le document et
+  le contrôle de ce poste ; sans paramètre, les six documents restent retournés.
+- Migration `2026_11_24_000000_add_rdv_hash_to_demande_camions.php` : colonne
+  `rdv_hash` nullable indexée, backfillée par lots à partir de la référence, de
+  l'identifiant camion et de la position définitive.
+- `App\Support\RdvId`, `App\Support\QrJwsVerifier`, `App\Services\QrScanService`
+  et `App\Support\MobileDossierPresenter` : centralisation de l'identifiant PF,
+  vérification JWS et présentation dossier.
+- Suites de tests `MobileAuthApiTest.php`, `MobileScanApiTest.php`,
+  `QrJwsVerifierTest.php` et `RdvIdTest.php`.
+- Migration `2026_11_23_000000_add_checks_to_demande_documents.php` : colonnes
+  nullable `check_result`, `checked_at`, `checked_by` et `check_note`.
+- `App\Support\Poste` : mapping centralisé postes 1-6 ↔ types de documents et
+  libellés, aligné sur `DemandeRdv::DOC_TYPES`.
+- Suite de tests `PosteTest.php` (mapping des postes 1-6).
 - Migration `2026_11_20_090000_add_documents_per_truck_to_demandes.php` :
   `temporary_uploads.truck_key`, `demande_documents.demande_camion_id`, index
   associés et backfill non destructif.
@@ -22,8 +41,21 @@ projet adhère au [versionnement sémantique](https://semver.org/lang/fr/).
   persistance, réordonnancement, suppression, anti-réemploi, QR par camion,
   documents historiques, validation `rdvId` et téléchargement.
 
+### Removed
+
+- **Breaking :** les cinq endpoints `/api/v1/admin/*` (login, liste des rendez-vous,
+  documents par poste, téléchargement et décision) sont supprimés ainsi que la
+  route `api.v1.admin.documents.download` et l'événement `check.poste`.
+- Contrôleurs, FormRequests, middleware `admin.mobile`, token `MobileAdminToken`
+  et presenter `MobileRendezVousPresenter` associés à l'ancienne API mobile.
+
 ### Changed
 
+- **Breaking :** l'API mobile passe dans le namespace global `/api/v1`, la
+  capacité devient `mobile.access`, le middleware `admin.mobile` devient
+  `mobile` et le nom du token Sanctum devient `mobile`.
+- **Breaking :** le scan ne modifie plus aucun document : les contrôles
+  `passe`/`refuse` ne sont plus exposés via l'API mobile.
 - **Breaking :** le champ `docs` passe d'un objet plat
   (`{ bc: token, ... }`) à un objet imbriqué par camion
   (`{ [truckKey]: { bc: token, ... } }`). Les anciens payloads sont rejetés.
@@ -57,6 +89,12 @@ projet adhère au [versionnement sémantique](https://semver.org/lang/fr/).
 
 ### Security
 
+- Vérification HMAC stricte des QR (`hash_equals` sur la chaîne brute
+  `config('app.key')`), whitelist `alg`/`kid`, décodage base64url canonique et
+  contrôle des claims `nbf`/`exp`/`sub` ; aucun token ni claim n'est journalisé.
+- Limitation du scan à 30 requêtes/minute par utilisateur, avec `Retry-After`.
+- Le filtrage par poste est appliqué après vérification des six empreintes `dh`
+  du QR : un document non affiché ne peut pas masquer une falsification.
 - Aucun secret de repli en dur pour la signature des QR : `APP_KEY` est
   obligatoire et une erreur explicite est levée si elle manque.
 - Un token d'upload ne peut être réutilisé pour un autre camion ou un autre

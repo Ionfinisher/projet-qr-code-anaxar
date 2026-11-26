@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Notifications\DemandeRdvDecided;
 use App\Notifications\DemandeRdvSubmitted;
 use App\Support\ContainerNumber;
+use App\Support\RdvId;
 use App\Support\SlotTime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,9 +21,7 @@ use RuntimeException;
 
 class DemandeRdvService
 {
-    public function __construct(private readonly CreneauUsageService $usage)
-    {
-    }
+    public function __construct(private readonly CreneauUsageService $usage) {}
 
     public function create(User $user, array $data): DemandeRdv
     {
@@ -357,6 +356,12 @@ class DemandeRdvService
             } else {
                 $camion->update($this->camionAttributes($truck, $index + 1, $operation));
             }
+
+            // L'identifiant dépend de l'id du camion : il n'est connu qu'après
+            // l'insertion et après application de la position définitive.
+            $camion->forceFill([
+                'rdv_hash' => substr(RdvId::for($camion, $demande), strlen(RdvId::PREFIX)),
+            ])->save();
 
             if (isset($camionIdsByKey[$key])) {
                 throw ValidationException::withMessages([

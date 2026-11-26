@@ -8,6 +8,7 @@ use App\Models\DemandeDocument;
 use App\Models\DemandeRdv;
 use App\Models\TemporaryUpload;
 use App\Models\User;
+use App\Support\RdvId;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
@@ -136,6 +137,12 @@ class DemandeDocumentParCamionTest extends TestCase
         ]);
 
         $response->assertSessionHasNoErrors()->assertRedirect();
+
+        $camion = DemandeRdv::firstOrFail()->camions()->firstOrFail();
+        $this->assertSame(
+            substr(RdvId::for($camion, $camion->demande), strlen(RdvId::PREFIX)),
+            $camion->rdv_hash
+        );
     }
 
     public function test_upload_requiert_une_cle_de_camion(): void
@@ -339,6 +346,14 @@ class DemandeDocumentParCamionTest extends TestCase
         $this->assertSame(12, $demande->documents()->count());
         $this->assertSame($second->id, $demande->camions()->orderBy('position')->firstOrFail()->id);
         $this->assertSame(6, $second->fresh()->documents()->count());
+
+        // Le hash suit la position définitive après réordonnancement.
+        foreach ($demande->camions()->get() as $camion) {
+            $this->assertSame(
+                substr(RdvId::for($camion, $demande), strlen(RdvId::PREFIX)),
+                $camion->rdv_hash
+            );
+        }
     }
 
     public function test_le_qr_de_chaque_camion_ne_contient_que_ses_propres_empreintes(): void
