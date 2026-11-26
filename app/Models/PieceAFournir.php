@@ -17,6 +17,8 @@ class PieceAFournir extends Model
 
     public const TYPE_PARTICULIER = 'particulier';
 
+    public const TYPE_RDV = 'rdv'; // Add specific type for each terminal
+
     public const TYPE_ALL = 'all';
 
     public const STATUS_ACTIVE = 'active';
@@ -29,11 +31,16 @@ class PieceAFournir extends Model
 
     protected $fillable = [
         'keypieceafournir',
+        'code',
         'libelle',
         'description',
         'isrequired',
         'extension',
         'statut',
+        'post',
+        'short',
+        'icon',
+        'hint',
         'type_de_piece',
         'created_by',
         'updated_by',
@@ -41,6 +48,7 @@ class PieceAFournir extends Model
 
     protected $casts = [
         'isrequired' => 'boolean',
+        'post' => 'integer',
     ];
 
     public function inscriptions()
@@ -55,6 +63,29 @@ class PieceAFournir extends Model
         return $query->where(function (Builder $query) {
             $query->whereNull('statut')->orWhere('statut', self::STATUS_ACTIVE);
         });
+    }
+
+    public function scopeRdv(Builder $query): Builder
+    {
+        return $query->where('type_de_piece', self::TYPE_RDV);
+    }
+
+    public function scopeInscription(Builder $query, ?string $userType = null): Builder
+    {
+        $query->where(function (Builder $q) {
+            $q->whereIn('type_de_piece', [self::TYPE_SOCIETE, self::TYPE_TRANSITAIRE, self::TYPE_PARTICULIER, self::TYPE_ALL])
+                ->orWhereNull('type_de_piece');
+        });
+
+        if ($userType) {
+            $query->where(function (Builder $q) use ($userType) {
+                $q->where('type_de_piece', $userType)
+                    ->orWhere('type_de_piece', self::TYPE_ALL)
+                    ->orWhereNull('type_de_piece');
+            });
+        }
+
+        return $query;
     }
 
     public function scopePourType(Builder $query, string $type): Builder

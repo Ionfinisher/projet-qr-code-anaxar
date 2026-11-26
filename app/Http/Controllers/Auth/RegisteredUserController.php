@@ -37,6 +37,7 @@ class RegisteredUserController extends Controller
                 ->get(['id', 'nom', 'code', 'indicatif']),
             'pieces' => PieceAFournir::query()
                 ->active()
+                ->inscription()
                 ->orderBy('libelle')
                 ->get(['id', 'libelle', 'description', 'isrequired', 'type_de_piece', 'extension']),
         ]);
@@ -93,7 +94,7 @@ class RegisteredUserController extends Controller
 
         $pieces = PieceAFournir::query()
             ->active()
-            ->pourType($data['user_type'])
+            ->inscription($data['user_type'])
             ->orderBy('libelle')
             ->get();
 

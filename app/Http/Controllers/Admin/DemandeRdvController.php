@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DemandeRdvController extends Controller
@@ -192,6 +193,44 @@ class DemandeRdvController extends Controller
         );
 
         return back()->with('success', 'Demande rejetée.');
+    }
+
+    public function validateDocument(DemandeRdv $demande, DemandeDocument $document, Request $request): RedirectResponse
+    {
+        abort_unless($document->demande_rdv_id === $demande->id, 404);
+        abort_unless(
+            $document->demande_camion_id === null
+                || $document->camion?->demande_rdv_id === $demande->id,
+            404
+        );
+
+        $this->service->validateDocument($document, $request->user());
+
+        $demande->refresh();
+        if ($demande->isApproved()) {
+            return back()->with('success', 'Tous les documents sont validés : la demande a été validée et les QR codes ont été générés.');
+        }
+
+        return back()->with('success', 'Document validé avec succès.');
+    }
+
+    public function previewDocument(DemandeRdv $demande, DemandeDocument $document): BinaryFileResponse
+    {
+        abort_unless($document->demande_rdv_id === $demande->id, 404);
+        abort_unless(
+            $document->demande_camion_id === null
+                || $document->camion?->demande_rdv_id === $demande->id,
+            404
+        );
+        abort_unless(Storage::disk('local')->exists($document->path), 404);
+
+        $path = Storage::disk('local')->path($document->path);
+        $mime = $document->mime ?: (Storage::disk('local')->mimeType($document->path) ?: 'application/octet-stream');
+
+        return response()->file($path, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="'.addslashes(basename($document->original_name)).'"',
+        ]);
     }
 
     public function downloadDocument(DemandeRdv $demande, DemandeDocument $document): StreamedResponse

@@ -1,9 +1,9 @@
 import { Button, Icon } from '@/Components/ui';
-import { DOCS } from '@/Lib/domain';
+import { DOCS, getRdvDocs } from '@/Lib/domain';
 import { docSlot, fmtSize } from './helpers';
 
 /**
- * Les 6 documents obligatoires d'un seul camion.
+ * Les documents obligatoires d'un seul camion.
  * Le formulaire reste responsable de l'état : ce composant est purement présentationnel.
  */
 export default function TruckDocuments({
@@ -16,9 +16,11 @@ export default function TruckDocuments({
     uploadErrors = {},
     errors = {},
     fileInputs,
+    docTypes = null,
     onUpload,
     onRemove,
 }) {
+    const rdvDocs = getRdvDocs(docTypes);
     const plate = truck.vehicle?.tractor?.trim();
     const driver = [truck.driver?.last?.trim(), truck.driver?.first?.trim()].filter(Boolean).join(' ');
 
@@ -38,7 +40,7 @@ export default function TruckDocuments({
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-                {DOCS.map((doc) => {
+                {rdvDocs.map((doc) => {
                     const slot = docSlot(truckKey, doc.key);
                     const meta = uploaded[slot];
                     const busy = uploading[slot];

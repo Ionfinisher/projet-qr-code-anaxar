@@ -137,6 +137,22 @@ class DemandeRdv extends Model
         return $this->status === self::STATUS_APPROVED;
     }
 
+    public function hasAllDocumentsValidated(): bool
+    {
+        // Must be approved first
+        if (! $this->isApproved()) {
+            return false;
+        }
+
+        $docs = $this->relationLoaded('documents') ? $this->documents : $this->documents()->get();
+
+        if ($docs->isEmpty()) {
+            return false;
+        }
+
+        return $docs->every(fn (DemandeDocument $doc) => $doc->isValidated());
+    }
+
     public function isActive(): bool
     {
         return in_array($this->status, self::ACTIVE_STATUSES, true);

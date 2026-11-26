@@ -53,11 +53,11 @@ function useRadioKeys(options, value, onChange) {
 /**
  * Choix exclusif sous forme de cartes : options [{ value, label, description, icon, disabled, aside }].
  */
-export function RadioCards({ options, value, onChange, label, columns = 2, size = 'md', className }) {
+export function RadioCards({ options, value, onChange, label, columns = 2, size = 'md', invalid = false, className }) {
   const keys = useRadioKeys(options, value, onChange);
   const cols = { 1: 'grid-cols-1', 2: 'grid-cols-1 sm:grid-cols-2', 3: 'grid-cols-1 sm:grid-cols-3', 4: 'grid-cols-2 lg:grid-cols-4' }[columns];
   return (
-    <div ref={keys.ref} role="radiogroup" aria-label={label} onKeyDown={keys.onKeyDown} className={cn('grid gap-2.5', cols, className)}>
+    <div ref={keys.ref} role="radiogroup" aria-label={label} aria-invalid={invalid ? 'true' : undefined} onKeyDown={keys.onKeyDown} className={cn('grid gap-2.5', cols, className)}>
       {options.map(o => {
         const on = o.value === value;
         return (
@@ -65,7 +65,7 @@ export function RadioCards({ options, value, onChange, label, columns = 2, size 
             onClick={() => onChange(o.value)}
             className={cn('flex w-full cursor-pointer items-start gap-3 rounded-xl border text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50',
               size === 'sm' ? 'px-3 py-2.5' : 'px-4 py-3.5',
-              on ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50')}>
+              on ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500' : invalid ? 'border-rose-300 bg-white hover:border-rose-400 hover:bg-rose-50/30' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50')}>
             {o.icon && (
               <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-lg', on ? 'bg-brand-600 text-white' : 'bg-slate-100 text-slate-600')}>
                 <Icon name={o.icon} size={18} />
@@ -76,7 +76,7 @@ export function RadioCards({ options, value, onChange, label, columns = 2, size 
               {o.description && <span className="mt-0.5 block text-sm text-slate-500">{o.description}</span>}
             </span>
             {o.aside}
-            {!o.icon && <span className={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2', on ? 'border-brand-600' : 'border-slate-300')}>{on && <span className="h-2 w-2 rounded-full bg-brand-600" />}</span>}
+            {!o.icon && <span className={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2', on ? 'border-brand-600' : invalid ? 'border-rose-400' : 'border-slate-300')}>{on && <span className="h-2 w-2 rounded-full bg-brand-600" />}</span>}
           </button>
         );
       })}

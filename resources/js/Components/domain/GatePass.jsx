@@ -18,7 +18,15 @@ export function GatePass({ rdv: r, compact = false, now, className }) {
       </div>
       <div className={cn('grid gap-5 p-5', compact ? 'grid-cols-[minmax(0,140px)_minmax(0,1fr)]' : 'grid-cols-1 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]')}>
         <div className="mx-auto w-full max-w-[260px] rounded-2xl border border-slate-200 p-2">
-          <QrCode text={r.token} label={`QR code signé du rendez-vous ${r.id}`} />
+          {r.token ? (
+            <QrCode text={r.token} label={`QR code signé du rendez-vous ${r.id}`} />
+          ) : (
+            <div className="flex h-44 w-full flex-col items-center justify-center rounded-xl bg-amber-50 p-4 text-center">
+              <Icon name="clock" size={28} className="text-amber-600 mb-2" />
+              <p className="text-xs font-semibold text-amber-900">QR Code en attente</p>
+              <p className="mt-1 text-[11px] text-amber-700">En attente de la validation complète des documents</p>
+            </div>
+          )}
         </div>
         <div className="flex min-w-0 flex-col gap-2">
           <p className="font-mono text-2xl font-semibold tracking-tight text-slate-900">{r.id}</p>

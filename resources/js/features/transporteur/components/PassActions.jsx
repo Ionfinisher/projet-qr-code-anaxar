@@ -1,5 +1,6 @@
 // Actions sur un gate pass : envoyer au chauffeur (WhatsApp, SMS, image), télécharger le PNG, copier le code.
 import { useRef, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import { driverName, formatPhone, relDay, TERMINALS } from '../../../lib/domain.js';
 import { passPng } from '../../../lib/passImage.js';
 import { saveFile, copyText } from '../../../lib/download.js';
@@ -13,6 +14,16 @@ import { passLink, waLink, waText } from '../passLinks.js';
 
 /** Boutons sous le pass ; `compact` : petite taille, sans le bloc « code du QR ». */
 export function PassActions({ rdv: r, compact = false }) {
+  const { auth } = usePage?.()?.props || {};
+  const isAdmin = Boolean(
+    auth?.user?.is_admin ||
+    auth?.user?.roles?.some((role) => role.name === 'admin' || role === 'admin')
+  );
+
+  if (isAdmin) {
+    return null;
+  }
+
   const taRef = useRef(null);
   const [busy, setBusy] = useState(false);
   const [send, setSend] = useState(false);

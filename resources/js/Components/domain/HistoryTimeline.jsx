@@ -7,6 +7,7 @@ const HIST = {
   modifiee: { label: 'Demande modifiée', icon: 'pencil' },
   mise_a_jour: { label: 'Demande mise à jour', icon: 'pencil' },
   complements: { label: 'Compléments demandés', icon: 'file-up', tone: 'warn' },
+  document_valide: { label: 'Document validé', icon: 'file-check', tone: 'ok' },
   validee: { label: 'Validée', icon: 'circle-check', tone: 'ok' },
   rejetee: { label: 'Rejetée', icon: 'circle-x', tone: 'bad' },
   annulee: { label: 'Annulée', icon: 'circle-x' },
@@ -20,6 +21,10 @@ export function HistoryTimeline({ items, className }) {
     <ol className={cn('relative flex flex-col gap-4', className)}>
       {list.map((h, i) => {
         const t = HIST[h.type] || { label: h.type, icon: 'circle' };
+        const label = (h.type === 'document_valide' && h.detail) ? h.detail : t.label;
+        const subtext = (h.type === 'document_valide' && h.detail)
+          ? h.by
+          : `${h.by}${h.detail ? ` · ${h.detail}` : ''}`;
         return (
           <li key={i} className="relative flex gap-3">
             {i < list.length - 1 && <span aria-hidden="true" className="absolute left-4 top-9 h-[calc(100%-12px)] w-px bg-slate-200" />}
@@ -28,10 +33,10 @@ export function HistoryTimeline({ items, className }) {
             </span>
             <div className="min-w-0 flex-1 pt-1">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-                <p className="text-sm font-semibold text-slate-900">{t.label}</p>
+                <p className="text-sm font-semibold text-slate-900">{label}</p>
                 <time className="text-xs text-slate-500" dateTime={h.at}>{fmtDateTime(h.at)}</time>
               </div>
-              <p className="text-[13px] text-slate-500">{h.by}{h.detail ? ` · ${h.detail}` : ''}</p>
+              {subtext && <p className="text-[13px] text-slate-500">{subtext}</p>}
             </div>
           </li>
         );

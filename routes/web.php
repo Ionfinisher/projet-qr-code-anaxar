@@ -74,6 +74,10 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::get('/demandes/{demande}', [AdminDemandeRdvController::class, 'show'])->name('demandes.show');
     Route::post('/demandes/{demande}/approve', [AdminDemandeRdvController::class, 'approve'])->name('demandes.approve');
     Route::post('/demandes/{demande}/reject', [AdminDemandeRdvController::class, 'reject'])->name('demandes.reject');
+    Route::get('/demandes/{demande}/documents/{document}/apercu', [AdminDemandeRdvController::class, 'previewDocument'])
+        ->name('demandes.documents.preview');
+    Route::post('/demandes/{demande}/documents/{document}/valider', [AdminDemandeRdvController::class, 'validateDocument'])
+        ->name('demandes.documents.validate');
     Route::get('/demandes/{demande}/documents/{document}/telecharger', [AdminDemandeRdvController::class, 'downloadDocument'])
         ->name('demandes.documents.download');
 

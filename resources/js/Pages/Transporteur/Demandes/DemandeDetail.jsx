@@ -1,9 +1,10 @@
 import { Alert, Badge, Card, KeyValue, Meter, SectionTitle, Button, DataTable } from '@/Components/ui';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { Icon } from '@/Components/ui/Icon';
 import { ContainerNumber, Plate } from '@/Components/domain';
 import {
     DOCS,
+    getRdvDocs,
     driverName,
     fmtDateTime,
     fmtDayLong,
@@ -23,8 +24,11 @@ function StatusBadge({ status }) {
 }
 
 export default function DemandeDetail({ demande, actions = null }) {
+    const { doc_types } = usePage().props;
+    const rdvDocs = getRdvDocs(doc_types);
     const status = statusMeta(demande.status);
     const usage = demande.usage || {};
+    const docsFor = (truckId) => demande.docs?.[String(truckId)] || {};
 
     return (
         <div className="flex flex-col gap-5">
@@ -42,6 +46,42 @@ export default function DemandeDetail({ demande, actions = null }) {
                         {actions}
                     </div>
                 </div>
+
+                {/* {demande.pending_documents?.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3">
+                        <span className="text-xs font-medium text-slate-500 mr-1">À valider :</span>
+                        {demande.pending_documents.map((p) => (
+                            <Badge key={p.id} tone="warn" icon="clock">
+                                {p.label}
+                                {demande.trucks?.length > 1 && p.position ? ` (Camion ${p.position})` : ''}
+                            </Badge>
+                        ))}
+                    </div>
+                )} */}
+
+                {demande.trucks.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                        <span className="text-xs font-medium text-slate-500">Validation des documents :</span>
+                        {demande.trucks.map((truck, index) => {
+                            const docs = docsFor(truck.id);
+                            const validatedCount = rdvDocs.filter((def) => docs[def.key]?.statut === 'valide').length;
+                            const totalTruckDocs = rdvDocs.length;
+                            const isAllValidated = validatedCount === totalTruckDocs && totalTruckDocs > 0;
+
+                            return (
+                                <Badge
+                                    key={truck.id}
+                                    tone={isAllValidated ? 'ok' : 'bad'}
+                                    icon={isAllValidated ? 'circle-check' : 'file-text'}
+                                >
+                                    Camion {index + 1}
+                                    {truck.vehicle?.tractor ? ` (${truck.vehicle.tractor})` : ''} : {validatedCount}/{totalTruckDocs} validés
+                                </Badge>
+                            );
+                        })}
+                    </div>
+                )}
+
 
                 <div className="mt-5">
                     <KeyValue
@@ -76,7 +116,7 @@ export default function DemandeDetail({ demande, actions = null }) {
             {demande.decision ? (
                 <Alert
                     tone={demande.status === 'validee' ? 'ok' : 'bad'}
-                    title={demande.status === 'validee' ? 'Demande validée' : 'Demande rejetée'}
+                    title={demande.status === 'validee' ? 'Demande acceptée par l’administration' : 'Demande rejetée'}
                 >
                     {demande.decision.reason && <p>Motif : {demande.decision.reason}</p>}
                     {demande.decision.comment && <p>Commentaire : {demande.decision.comment}</p>}
@@ -84,14 +124,27 @@ export default function DemandeDetail({ demande, actions = null }) {
                         Décision de {demande.decision.by || 'l’administration'} le {fmtDateTime(demande.decision.at)}
                     </p>
                     {demande.status === 'validee' && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                            <Button
-                                size="sm"
-                                icon="qr-code"
-                                onClick={() => router.get(route('transporteur.rdv.index', { q: demande.reference }))}
-                            >
-                                Consulter les rendez-vous & QR ({demande.trucks?.length || 1})
-                            </Button>
+                        <div className="mt-3 flex flex-col gap-2">
+                            {demande.documents_validated ? (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        size="sm"
+                                        icon="qr-code"
+                                        onClick={() => router.get(route('transporteur.rdv.index', { q: demande.reference }))}
+                                    >
+                                        Consulter les rendez-vous & QR ({demande.trucks?.length || 1})
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="rounded-lg bg-amber-50 p-2.5 text-xs text-amber-800 border border-amber-200">
+                                    <p className="font-semibold flex items-center gap-1.5">
+                                        <Icon name="clock" size={14} /> Validation des documents requise
+                                    </p>
+                                    <p className="mt-0.5">
+                                        Votre demande est acceptée, mais vos documents sont actuellement en attente de validation par les agents. Le QR code sera généré automatiquement dès que tous les documents seront validés.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
                 </Alert>
@@ -125,9 +178,9 @@ export default function DemandeDetail({ demande, actions = null }) {
                                             <ContainerNumber value={number} size="sm" placeholder="Vide" />
                                             {number ? (
                                                 <Icon
-                                                    name={parsed.valid ? 'circle-check' : 'circle-x'}
+                                                    name={parsed.valid ? 'circle-check' : 'triangle-alert'}
                                                     size={15}
-                                                    className={parsed.valid ? 'text-emerald-600' : 'text-rose-600'}
+                                                    className={parsed.valid ? 'text-emerald-600' : 'text-amber-500'}
                                                     label={parsed.valid ? 'ISO 6346 valide' : 'ISO 6346 invalide'}
                                                 />
                                             ) : null}
@@ -176,18 +229,15 @@ export default function DemandeDetail({ demande, actions = null }) {
                                 ),
                             },
                             {
-                                key: 'lic',
-                                header: 'Permis',
+                                // Ratio de documents validés sur tous les documents par camion
+                                key: 'dcs',
+                                header: 'Documents',
                                 render: (truck) =>
-                                    licenseValid(truck.driver?.license) ? (
-                                        <span className="font-mono text-[13px] text-slate-700">
-                                            {truck.driver.license}
-                                        </span>
-                                    ) : (
-                                        <Badge tone="bad" icon="triangle-alert">
-                                            Manquant
-                                        </Badge>
-                                    ),
+                                    <span className="font-mono text-[13px] text-slate-700">
+                                        {(demande.pending_documents || []).filter(
+                                            (p) => (String(p.camion_id) === String(truck.id) || (p.position != null && truck.position != null && p.position === truck.position)) && (p.status === 'valide')).length}/{(demande.pending_documents || []).filter(
+                                                (p) => (String(p.camion_id) === String(truck.id) || (p.position != null && truck.position != null && p.position === truck.position))).length} Validé(s)
+                                    </span>
                             },
                         ]}
                     />
@@ -195,21 +245,35 @@ export default function DemandeDetail({ demande, actions = null }) {
             </Card>
 
             <Card>
-                <SectionTitle icon="file-text">Documents par camion</SectionTitle>
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 p-y mb-6">
+                    <SectionTitle icon="file-text">Documents par camion</SectionTitle>
+                </div>
+                <div className="mt-4 flex flex-col gap-4">
                     {(demande.trucks || []).map((truck, index) => {
                         const docs = demande.docs?.[String(truck.id)] || {};
+                        const truckPendingDocs = (demande.pending_documents || []).filter(
+                            (p) => String(p.camion_id) === String(truck.id) || (p.position != null && p.position === (truck.position ?? index + 1))
+                        );
 
                         return (
                             <div key={truck.id} className="rounded-xl border border-slate-200 p-3">
-                                <p className="mb-2 text-sm font-semibold text-slate-900">
-                                    Camion {index + 1}
-                                    {truck.vehicle?.tractor ? (
-                                        <span className="ml-2 font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
-                                    ) : null}
-                                </p>
+                                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">
+                                        Camion {index + 1}
+                                        {truck.vehicle?.tractor ? (
+                                            <span className="ml-2 font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
+                                        ) : null}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                        {truckPendingDocs.map((p) => (
+                                            <Badge key={p.id} tone={p.status === 'en_attente' ? 'bad' : 'ok'} icon="clock">
+                                                {p.label}
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                </div>
                                 <div className="grid gap-2 sm:grid-cols-2">
-                                    {DOCS.map((doc) => {
+                                    {rdvDocs.map((doc) => {
                                         const file = docs[doc.key];
 
                                         return (
@@ -222,6 +286,19 @@ export default function DemandeDetail({ demande, actions = null }) {
                                                     <p className="truncate text-xs text-slate-500">
                                                         {file ? `${file.name} · ${fmtSize(file.size)}` : 'Non fourni'}
                                                     </p>
+                                                    {file && demande.status === 'validee' && (
+                                                        <p className="mt-1">
+                                                            {file.statut === 'valide' ? (
+                                                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+                                                                    <Icon name="circle-check" size={12} /> Validé
+                                                                </span>
+                                                            ) : (
+                                                                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700">
+                                                                    <Icon name="clock" size={12} /> En attente de validation
+                                                                </span>
+                                                            )}
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 {file ? (
                                                     <a
@@ -251,7 +328,7 @@ export default function DemandeDetail({ demande, actions = null }) {
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate text-sm font-medium text-slate-800">{file.name}</p>
                                             <p className="truncate text-xs text-slate-500">
-                                                {DOCS.find((doc) => doc.key === file.type)?.label || file.type} · {fmtSize(file.size)}
+                                                {rdvDocs.find((doc) => doc.key === file.type)?.label || file.label || file.type} · {fmtSize(file.size)}
                                             </p>
                                         </div>
                                         <a
@@ -295,16 +372,17 @@ export default function DemandeDetail({ demande, actions = null }) {
                     <ol className="relative flex flex-col gap-4 border-l border-slate-200 pl-5">
                         {demande.history.map((event, index) => {
                             const meta = EVENT_META[event.type] || { label: event.type, tone: 'neutral', icon: 'info' };
+                            const label = (event.type === 'document_valide' && event.detail) ? event.detail : meta.label;
 
                             return (
                                 <li key={`${event.type}-${event.at}-${index}`} className="relative">
                                     <span className="absolute -left-[27px] top-0.5 flex h-3 w-3 rounded-full border-2 border-white bg-slate-400" aria-hidden="true" />
                                     <div className="flex flex-wrap items-center gap-2">
-                                        <Badge tone={meta.tone} size="sm" icon={meta.icon}>{meta.label}</Badge>
+                                        <Badge tone={meta.tone} size="sm" icon={meta.icon}>{label}</Badge>
                                         <span className="text-xs text-slate-500">{fmtDateTime(event.at)}</span>
                                     </div>
                                     {event.by ? <p className="mt-1 text-sm text-slate-600">Par {event.by}</p> : null}
-                                    {event.detail ? <p className="mt-0.5 text-sm text-slate-500">{event.detail}</p> : null}
+                                    {event.detail && event.type !== 'document_valide' ? <p className="mt-0.5 text-sm text-slate-500">{event.detail}</p> : null}
                                 </li>
                             );
                         })}

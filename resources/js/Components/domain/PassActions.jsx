@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { usePage } from '@inertiajs/react';
 import { driverName, formatPhone, relDay, TERMINALS } from '@/Lib/domain';
 import { passPng } from '@/Lib/passImage';
 import { saveFile, copyText } from '@/Lib/download';
@@ -18,16 +19,14 @@ export const passLink = (r) =>
 export const waText = (r) =>
     [
         `PortFlow · Gate pass ${r.id}`,
-        `Créneau : ${relDay(r.slot?.date)} ${r.slot?.start}–${r.slot?.end} · ${
-            TERMINALS[r.terminal]?.label || r.terminal
-        }`,
-        `Conteneur : ${r.container?.number || 'à attribuer'} · Tracteur ${r.vehicle?.country} ${
-            r.vehicle?.tractor
+        `Conteneur : ${r.container?.number || 'à attribuer'} · Tracteur ${r.vehicle?.country} ${r.vehicle?.tractor
         }`,
         r.driver?.license &&
-            `Chauffeur : ${driverName(r.driver)} · permis n° ${r.driver.license}`,
+        `Chauffeur : ${driverName(r.driver)} · permis n° ${r.driver.license}`,
         `Votre QR code : ${passLink(r)}`,
         'Ouvrez le lien et présentez le QR à la guérite, avec votre permis de conduire.',
+        `Créneau : ${relDay(r.slot?.date)} ${r.slot?.start}–${r.slot?.end} · ${TERMINALS[r.terminal]?.label || r.terminal
+        }`,
     ]
         .filter(Boolean)
         .join('\n');
@@ -35,8 +34,8 @@ export const waText = (r) =>
 export const waLink = (r) =>
     r.driver?.phone
         ? `https://wa.me/${r.driver.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(
-              waText(r)
-          )}`
+            waText(r)
+        )}`
         : null;
 
 function SendOption({
@@ -230,6 +229,16 @@ export function SendModal({ rdv: r, open, onClose }) {
 }
 
 export function PassActions({ rdv: r, compact = false }) {
+    const { auth } = usePage().props || {};
+    const isAdmin = Boolean(
+        auth?.user?.is_admin ||
+        auth?.user?.roles?.some((role) => role.name === 'admin' || role === 'admin')
+    );
+
+    if (isAdmin) {
+        return null;
+    }
+
     const taRef = useRef(null);
     const [busy, setBusy] = useState(false);
     const [send, setSend] = useState(false);
@@ -270,35 +279,6 @@ export function PassActions({ rdv: r, compact = false }) {
                     Copier le code
                 </Button>
             </div>
-
-            {!compact ? (
-                <details className="group rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm">
-                    <summary className="cursor-pointer select-none font-medium text-slate-700 marker:text-slate-400">
-                        Code du QR (JWS compact, {r.token?.length || 0} caractères)
-                    </summary>
-                    <label className="sr-only" htmlFor={`tok-${r.id}`}>
-                        Code du QR
-                    </label>
-                    <textarea
-                        id={`tok-${r.id}`}
-                        ref={taRef}
-                        readOnly
-                        value={r.token}
-                        onFocus={(e) => e.target.select()}
-                        rows={4}
-                        className="mt-3 block w-full resize-y break-all rounded-lg border border-slate-200 bg-white p-2.5 font-mono text-[11.5px] leading-relaxed text-slate-700 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/25"
-                    />
-                </details>
-            ) : (
-                <textarea
-                    ref={taRef}
-                    readOnly
-                    value={r.token}
-                    className="sr-only"
-                    tabIndex={-1}
-                    aria-hidden="true"
-                />
-            )}
 
             <SendModal rdv={r} open={send} onClose={() => setSend(false)} />
         </div>

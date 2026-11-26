@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\PieceAFournir;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Middleware;
@@ -52,6 +53,25 @@ class HandleInertiaRequests extends Middleware
                     'key' => $hasMessage ? (string) Str::uuid() : null,
                 ];
             },
+            'doc_types' => fn () => PieceAFournir::query()
+                ->active()
+                ->rdv()
+                ->orderBy('post')
+                ->get()
+                ->map(fn (PieceAFournir $p) => [
+                    'id' => $p->id,
+                    'key' => $p->code ?: $p->short,
+                    'code' => $p->code ?: $p->short,
+                    'label' => $p->libelle,
+                    'short' => $p->short ?: $p->libelle,
+                    'icon' => $p->icon ?: 'file-text',
+                    'hint' => $p->hint ?: $p->description,
+                    'post' => $p->post,
+                    'isrequired' => (bool) $p->isrequired,
+                    'extension' => $p->extension,
+                ])
+                ->values()
+                ->all(),
         ];
     }
 }

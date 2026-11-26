@@ -3,6 +3,7 @@ import { cn } from '@/Lib/cn';
 import {
     COUNTRY,
     DOCS,
+    getRdvDocs,
     ISO_TYPE,
     OPS,
     TERMINALS,
@@ -98,7 +99,8 @@ function TruckReview({ truck, index }) {
  * Étape de vérification : relit les informations saisies avant l'envoi.
  * `onEdit(step)` ramène à l'étape concernée du formulaire.
  */
-export default function DemandeReview({ data, selectedSlot, isTransit, uploaded, onEdit }) {
+export default function DemandeReview({ data, selectedSlot, isTransit, uploaded, docTypes = null, onEdit }) {
+    const rdvDocs = getRdvDocs(docTypes);
     const op = OPS[data.op];
     const terminal = TERMINALS[data.terminal];
     const slotLabel = selectedSlot
@@ -106,9 +108,9 @@ export default function DemandeReview({ data, selectedSlot, isTransit, uploaded,
         : 'Créneau non choisi';
 
     const provided = (data.trucks || []).reduce((total, truck) => (
-        total + DOCS.filter((doc) => data.docs?.[String(truck.key)]?.[doc.key]).length
+        total + rdvDocs.filter((doc) => data.docs?.[String(truck.key)]?.[doc.key]).length
     ), 0);
-    const expected = (data.trucks || []).length * DOCS.length;
+    const expected = (data.trucks || []).length * rdvDocs.length;
 
     const mandatedName = data.mandated.type === 'entreprise'
         ? data.mandated.company.trim()
@@ -158,7 +160,7 @@ export default function DemandeReview({ data, selectedSlot, isTransit, uploaded,
                 <div className="flex flex-col gap-4">
                     {(data.trucks || []).map((truck, index) => {
                         const truckKey = String(truck.key);
-                        const count = DOCS.filter((doc) => data.docs?.[truckKey]?.[doc.key]).length;
+                        const count = rdvDocs.filter((doc) => data.docs?.[truckKey]?.[doc.key]).length;
 
                         return (
                             <div key={truckKey} className="rounded-xl border border-slate-200 bg-white p-3">
@@ -169,10 +171,10 @@ export default function DemandeReview({ data, selectedSlot, isTransit, uploaded,
                                             <span className="ml-2 font-mono text-xs text-slate-500">{truck.vehicle.tractor}</span>
                                         ) : null}
                                     </p>
-                                    <Badge tone={count === DOCS.length ? 'ok' : 'neutral'}>{count}/{DOCS.length}</Badge>
+                                    <Badge tone={count === rdvDocs.length ? 'ok' : 'neutral'}>{count}/{rdvDocs.length}</Badge>
                                 </div>
                                 <ul className="flex flex-col gap-1.5">
-                                    {DOCS.map((doc) => {
+                                    {rdvDocs.map((doc) => {
                                         const ok = Boolean(data.docs?.[truckKey]?.[doc.key]);
                                         const meta = uploaded?.[docSlot(truckKey, doc.key)];
 

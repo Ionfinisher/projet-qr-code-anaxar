@@ -69,6 +69,18 @@ export const DOCS = [
 ];
 export const DOC = Object.fromEntries(DOCS.map((d) => [d.key, d]));
 
+/**
+ * Retourne la liste des types de documents de RDV actifs.
+ * Utilise en priorité les pièces fournies dynamiquement par Inertia (`doc_types`),
+ * avec fallback sur le référentiel statique `DOCS`.
+ */
+export function getRdvDocs(docTypes) {
+    if (Array.isArray(docTypes) && docTypes.length > 0) {
+        return docTypes;
+    }
+    return DOCS;
+}
+
 export const OPS = {
     IMP: {
         label: "Enlèvement import",

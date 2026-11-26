@@ -130,7 +130,6 @@ export function StepTrucks({ f, set, setTruck, e }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-600">{f.trucks.length} camion{f.trucks.length > 1 ? 's' : ''} · même créneau, un QR code par camion après validation.</p>
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" size="sm" icon="clipboard-paste" onClick={() => setPaste(true)}>Coller depuis un tableur</Button>
           <Button variant="secondary" size="sm" icon="plus" onClick={add}>Ajouter un camion</Button>
         </div>
       </div>
